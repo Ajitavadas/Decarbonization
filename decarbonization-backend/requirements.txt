@@ -1,14 +1,34 @@
 #databases==0.6.3  # if you use databases library for async DB connection, optional
+# Core FastAPI
 fastapi==0.109.0
 uvicorn==0.27.0
+
+# Authentication & Security
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+bcrypt
+PyJWT
+
+# Data Validation
 pydantic==2.5.0
 pydantic-settings==2.1.0
-sqlalchemy==2.0.19
-asyncpg==0.27.0
+email-validator
+
+# Database
+sqlalchemy==2.0.23
+asyncpg==0.29.0
+psycopg2-binary
+alembic==1.12.1
+
+# Caching
 redis
+
+# Testing
 pytest==7.4.3
 pytest-asyncio==0.21.1
 httpx==0.25.2
-psycopg2-binary
+pytest-cov==4.1.0
+
+# Utilities
+python-dotenv
+python-multipart

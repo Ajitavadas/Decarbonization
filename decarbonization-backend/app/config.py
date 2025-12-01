@@ -1,13 +1,39 @@
+# app/config.py
+"""
+Application configuration settings
+Using Pydantic Settings for environment variable management
+"""
+
 from pydantic_settings import BaseSettings
-from datetime import timedelta
+from typing import List
+
 
 class Settings(BaseSettings):
-    SECRET_KEY: str
+    """Application settings from environment variables"""
+    
+    # Application
+    APP_NAME: str = "Decarbonization Platform API"
+    ENVIRONMENT: str = "development"  # development, staging, production
+    DEBUG: bool = False
+    
+    # Security
+    SECRET_KEY: str = "your-secret-key-change-in-production"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    ENVIRONMENT: str = "development"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours per AC-1.1
+    
+    # Database
+    DATABASE_URL: str = "postgresql+asyncpg://decarb_user:decarb_password@localhost:5432/decarb_db"
+    
+    # CORS
+    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8000"]
+    
+    # JWT
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRATION_HOURS: int = 24
     
     class Config:
         env_file = ".env"
+        env_file_encoding = "utf-8"
+
 
 settings = Settings()

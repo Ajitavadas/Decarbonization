@@ -1,22 +1,60 @@
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
-from datetime import timedelta
-from app.config import settings
-from app.auth.jwt_handler import create_access_token
-from app.auth.oauth2_scheme import get_current_user
-from app.routers import health
+# app/main.py
+"""
+FastAPI Application Entry Point
+- Application initialization
+- Router registration
+- Middleware configuration
+- Startup/shutdown events
+"""
 
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+import logging
+
+from app.config import settings
+from app.routers import health
+from app.routers import organizations
+# app.include_router(organizations.router)
+from app.routers.auth import router as auth_router
+from app.database import init_db, close_db
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+# Lifespan events
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Handle startup and shutdown events"""
+    # Startup
+    logger.info("🚀 Starting Decarbonization Platform API")
+    await init_db()
+    logger.info("✅ Database initialized")
+    
+    yield
+    
+    # Shutdown
+    logger.info("🛑 Shutting down API")
+    await close_db()
+    logger.info("✅ Database connection closed")
+
+
+# Create FastAPI app
 app = FastAPI(
     title="Decarbonization Platform API",
     version="1.0.0",
+    description="Carbon emissions tracking and management platform",
     docs_url="/docs",
-    openapi_url="/openapi.json"
+    openapi_url="/openapi.json",
+    lifespan=lifespan,
 )
 
-# CORS configuration
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -24,31 +62,22 @@ app.add_middleware(
 
 # Include routers
 app.include_router(health.router, tags=["health"])
+app.include_router(auth_router, tags=["authentication"])
 
-# Auth endpoint for testing
-@app.post("/auth/token")
-async def login(username: str, password: str):
-    """
-    Mock login endpoint. In production, validate against user database.
-    """
-    if username == "demo" and password == "demo":
-        access_token_expires = timedelta(
-            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-        )
-        access_token = create_access_token(
-            data={"sub": username}, expires_delta=access_token_expires
-        )
-        return {"access_token": access_token, "token_type": "bearer"}
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid credentials"
-    )
 
-@app.get("/protected")
-async def protected_route(current_user: str = Depends(get_current_user)):
-    """Protected endpoint requiring valid JWT token."""
-    return {"message": f"Hello {current_user}"}
-
-@app.get("/")
+# Root endpoint
+@app.get("/", tags=["root"])
 async def root():
-    return {"status": "Decarbonization Platform API Running"}
+    """Root endpoint"""
+    return {
+        "status": "Decarbonization Platform API Running",
+        "version": "1.0.0",
+        "environment": settings.ENVIRONMENT,
+    }
+
+
+# Health check endpoint
+@app.get("/health/ready", tags=["health"])
+async def readiness():
+    """Readiness probe for Kubernetes"""
+    return {"status": "ready"}
