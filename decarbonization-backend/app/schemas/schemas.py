@@ -19,7 +19,10 @@ class UserRegister(BaseModel):
     username: str = Field(..., min_length=3, max_length=100, pattern="^[a-zA-Z0-9_-]+$")
     password: str = Field(..., min_length=8, max_length=255)
     full_name: Optional[str] = Field(None, max_length=255)
-    organization_id: str
+    # Organization can be provided or created during registration
+    organization_id: Optional[str] = None
+    organization_name: Optional[str] = None
+    organization_slug: Optional[str] = None
     
     @field_validator('password')
     @classmethod
