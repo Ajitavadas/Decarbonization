@@ -8,7 +8,7 @@ Pydantic schemas for request/response validation
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 
 # ==================== User Schemas ====================
@@ -237,5 +237,54 @@ class OrganizationResponse(BaseModel):
                 "is_active": True,
                 "created_at": "2025-12-01T14:09:00Z",
                 "updated_at": "2025-12-01T14:09:00Z"
+            }
+        }
+
+# ==================== CSV Import Schemas ====================
+
+class CSVImportResponse(BaseModel):
+    """Response for CSV import operation"""
+    import_id: str
+    status: str  # "pending", "processing", "completed", "failed"
+    total_rows: Optional[int] = None
+    successful_rows: Optional[int] = None
+    failed_rows: Optional[int] = None
+    errors: Optional[List[dict]] = None
+    processing_time_seconds: Optional[float] = None
+    created_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "import_id": "550e8400-e29b-41d4-a716-446655440000",
+                "status": "completed",
+                "total_rows": 1000,
+                "successful_rows": 995,
+                "failed_rows": 5,
+                "errors": [
+                    {"row": 15, "error": "Invalid scope value"},
+                    {"row": 42, "error": "Missing required field: activity_value"}
+                ],
+                "processing_time_seconds": 12.5
+            }
+        }
+
+class CSVImportErrorResponse(BaseModel):
+    """Error details for CSV import"""
+    import_id: str
+    total_errors: int
+    errors: List[dict]  # [{"row": int, "error": str}]
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "import_id": "550e8400-e29b-41d4-a716-446655440000",
+                "total_errors": 5,
+                "errors": [
+                    {"row": 15, "error": "Scope must be 1, 2, or 3. Got: 4"},
+                    {"row": 20, "error": "Missing required field: scope"},
+                    {"row": 42, "error": "Activity value must be positive. Got: -100"}
+                ]
             }
         }

@@ -15,8 +15,8 @@ import logging
 from app.config import settings
 from app.routers import health
 from app.routers import organizations
-# app.include_router(organizations.router)
 from app.routers.auth import router as auth_router
+from app.routers import csv_import
 from app.database import init_db, close_db
 
 # Configure logging
@@ -63,6 +63,8 @@ app.add_middleware(
 # Include routers
 app.include_router(health.router, tags=["health"])
 app.include_router(auth_router, tags=["authentication"])
+app.include_router(organizations.router, tags=["organizations"])
+app.include_router(csv_import.router, tags=["csv_import"])
 
 
 # Root endpoint
