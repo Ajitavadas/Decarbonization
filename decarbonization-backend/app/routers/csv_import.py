@@ -148,10 +148,10 @@ async def process_csv_import(
     
     # Dedicated DB session for background task
     async with async_session() as db:
-        try:
+    try:
             # Parse file (CSV or XLSX)
             if filename.lower().endswith(".csv"):
-                valid_rows, error_rows = CSVParsingService.parse_csv(file_content)
+        valid_rows, error_rows = CSVParsingService.parse_csv(file_content)
             elif filename.lower().endswith(".xlsx"):
                 valid_rows, error_rows = CSVParsingService.parse_xlsx(file_content)
             else:
@@ -160,45 +160,45 @@ async def process_csv_import(
             # Check for internal duplicates
             unique_rows, duplicate_errors = await ImportService.check_duplicates(db, org_id, valid_rows)
             error_rows.extend(duplicate_errors)
-            
-            total_rows = len(valid_rows) + len(error_rows)
-            
+        
+        total_rows = len(valid_rows) + len(error_rows)
+        
             # Process valid unique rows
-            transaction_objects = []
+        transaction_objects = []
             for row in unique_rows:
-                try:
-                    co2e_kg, co2e_tonnes = CSVParsingService.calculate_co2e(
-                        float(row['activity_value']),
-                        float(row['emission_factor_value'])
-                    )
-                    
-                    transaction = EmissionTransaction(
-                        organization_id=org_id,
-                        description=row['description'].strip(),
-                        transaction_date=datetime.fromisoformat(
-                            row['transaction_date'].replace('Z', '+00:00')
-                        ),
-                        scope=int(row['scope']),
-                        category=row['category'].strip(),
-                        activity_value=float(row['activity_value']),
-                        activity_unit=row['activity_unit'].strip(),
-                        emission_factor_value=float(row['emission_factor_value']),
-                        co2e_kg=co2e_kg,
-                        co2e_tonnes=co2e_tonnes,
-                        supplier_name=row.get('supplier_name', '').strip() or None,
-                        project_id=row.get('project_id', '').strip() or None,
-                        notes=row.get('notes', '').strip() or None,
-                        created_by_user_id=user_id
-                    )
-                    transaction_objects.append(transaction)
-                except Exception as e:
-                    error_rows.append({
-                        "row": row.get("_row_num", "?"),
-                        "error": f"Processing error: {str(e)}"
-                    })
-            
+            try:
+                co2e_kg, co2e_tonnes = CSVParsingService.calculate_co2e(
+                    float(row['activity_value']),
+                    float(row['emission_factor_value'])
+                )
+                
+                transaction = EmissionTransaction(
+                    organization_id=org_id,
+                    description=row['description'].strip(),
+                    transaction_date=datetime.fromisoformat(
+                        row['transaction_date'].replace('Z', '+00:00')
+                    ),
+                    scope=int(row['scope']),
+                    category=row['category'].strip(),
+                    activity_value=float(row['activity_value']),
+                    activity_unit=row['activity_unit'].strip(),
+                    emission_factor_value=float(row['emission_factor_value']),
+                    co2e_kg=co2e_kg,
+                    co2e_tonnes=co2e_tonnes,
+                    supplier_name=row.get('supplier_name', '').strip() or None,
+                    project_id=row.get('project_id', '').strip() or None,
+                    notes=row.get('notes', '').strip() or None,
+                    created_by_user_id=user_id
+                )
+                transaction_objects.append(transaction)
+            except Exception as e:
+                error_rows.append({
+                    "row": row.get("_row_num", "?"),
+                    "error": f"Processing error: {str(e)}"
+                })
+        
             # Bulk insert
-            if transaction_objects:
+        if transaction_objects:
                 successful, batch_errors = await ImportService.bulk_insert_transactions(db, transaction_objects)
                 for idx, err in enumerate(batch_errors, start=1):
                     error_rows.append({"row": f"batch-{idx}", "error": err})
@@ -212,55 +212,55 @@ async def process_csv_import(
             await ImportService.create_audit_log(
                 db=db,
                 org_id=org_id,
-                user_id=user_id,
+            user_id=user_id,
                 import_id=import_id,
                 success_count=successful,
                 error_count=len(error_rows),
                 filename=filename,
                 processing_time=processing_time,
             )
-            
+        
             # Persist result
             result = {
-                "import_id": import_id,
-                "status": "completed",
-                "user_id": user_id,
-                "org_id": org_id,
-                "filename": filename,
-                "total_rows": total_rows,
+            "import_id": import_id,
+            "status": "completed",
+            "user_id": user_id,
+            "org_id": org_id,
+            "filename": filename,
+            "total_rows": total_rows,
                 "successful_rows": successful,
-                "failed_rows": len(error_rows),
-                "errors": error_rows,
-                "processing_time_seconds": round(processing_time, 2),
-                "completed_at": datetime.now(timezone.utc).isoformat()
-            }
+            "failed_rows": len(error_rows),
+            "errors": error_rows,
+            "processing_time_seconds": round(processing_time, 2),
+            "completed_at": datetime.now(timezone.utc).isoformat()
+        }
             await _store_import_result(import_id, result)
         
-        except Exception as e:
-            processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
-            
-            # Log error
-            error_log = AuditLog(
-                organization_id=org_id,
-                user_id=user_id,
-                action="CSV_BULK_IMPORT_FAILED",
-                resource_type="EmissionTransaction",
-                description=f"CSV import failed: {str(e)}"
-            )
-            db.add(error_log)
-            await db.commit()
-            
+    except Exception as e:
+        processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
+        
+        # Log error
+        error_log = AuditLog(
+            organization_id=org_id,
+            user_id=user_id,
+            action="CSV_BULK_IMPORT_FAILED",
+            resource_type="EmissionTransaction",
+            description=f"CSV import failed: {str(e)}"
+        )
+        db.add(error_log)
+        await db.commit()
+        
             # Persist failure result
             result = {
-                "import_id": import_id,
-                "status": "failed",
-                "user_id": user_id,
-                "org_id": org_id,
-                "filename": filename,
-                "error": str(e),
-                "processing_time_seconds": round(processing_time, 2),
-                "failed_at": datetime.now(timezone.utc).isoformat()
-            }
+            "import_id": import_id,
+            "status": "failed",
+            "user_id": user_id,
+            "org_id": org_id,
+            "filename": filename,
+            "error": str(e),
+            "processing_time_seconds": round(processing_time, 2),
+            "failed_at": datetime.now(timezone.utc).isoformat()
+        }
             await _store_import_result(import_id, result)
 
 @router.get("/csv/{import_id}", response_model=dict)

@@ -21,32 +21,32 @@ async def register_user(user_data: UserRegister, db: AsyncSession = Depends(get_
     # 1. Check if email already exists
     result = await db.execute(select(User).filter(User.email == user_data.email))
     if result.scalars().first():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email already registered"
-        )
-    
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Email already registered"
+            )
+        
     # 2. Handle Organization (Get Existing or Create New)
     # Use provided organization_name or fallback to a default
     org_name = user_data.organization_name or f"{user_data.username}'s Org"
     org_id = await get_or_create_organization(db, org_name, user_data.organization_slug)
-
+        
     # 3. Create User
     hashed_pwd = get_password_hash(user_data.password)
-    new_user = User(
-        email=user_data.email,
-        username=user_data.username,
+        new_user = User(
+            email=user_data.email,
+            username=user_data.username,
         hashed_password=hashed_pwd,
-        full_name=user_data.full_name,
+            full_name=user_data.full_name,
         organization_id=org_id,
-        is_active=True,
+            is_active=True,
         is_admin=False
-    )
-
-    db.add(new_user)
-    await db.commit()
-    await db.refresh(new_user)
-
+        )
+        
+        db.add(new_user)
+        await db.commit()
+        await db.refresh(new_user)
+        
     return new_user
 
 @router.post("/token", response_model=TokenResponse)

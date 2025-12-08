@@ -133,9 +133,9 @@ class CSVParsingService:
                 valid_rows.append(row_dict)
             else:
                 error_rows.append({"row": row_num, "error": error_msg})
-
+        
         return valid_rows, error_rows
-
+    
     @staticmethod
     def validate_row(row: Dict, row_num: int) -> Tuple[bool, str]:
         """
@@ -204,7 +204,7 @@ class CSVParsingService:
                 datetime.strptime(date_str, '%Y-%m-%d')
         except (ValueError, KeyError):
             return False, f"Invalid date format. Use ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS). Got: {row['transaction_date']}"
-
+        
         # Optional fields length validation
         supplier = row.get('supplier_name') or ""
         if supplier and len(supplier.strip()) > 255:

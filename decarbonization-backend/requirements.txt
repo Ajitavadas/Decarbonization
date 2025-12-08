@@ -32,3 +32,9 @@ pytest-cov==4.1.0
 # Utilities
 python-dotenv
 python-multipart
+
+# AI 
+dspy-ai
+langchain
+langchain-google-genai
+google-generativeai

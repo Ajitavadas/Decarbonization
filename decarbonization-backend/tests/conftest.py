@@ -5,6 +5,12 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from datetime import datetime, timezone
+from app.models.models import (
+    Base, User, Organization, EmissionTransaction, EmissionFactor
+)
+from app.auth.jwt_handler import create_access_token
+import uuid
 from sqlalchemy.pool import NullPool
 
 from app.main import app
@@ -73,5 +79,123 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     # ASGITransport is needed for newer httpx versions with FastAPI
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
+    
+    app.dependency_overrides.clear()
+TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
+
+@pytest.fixture
+async def db_session():
+    """Create test database session"""
+    engine = create_async_engine(TEST_DB_URL, echo=False)
+    
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    
+    AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    
+    async with AsyncSessionLocal() as session:
+        yield session
+    
+    await engine.dispose()
+
+@pytest.fixture
+async def test_org(db_session):
+    """Create test organization"""
+    org = Organization(
+        id=str(uuid.uuid4()),
+        name="Test Organization",
+        slug="test-org",
+        is_active=True
+    )
+    db_session.add(org)
+    await db_session.commit()
+    await db_session.refresh(org)
+    return org
+
+@pytest.fixture
+async def test_user(db_session, test_org):
+    """Create test user"""
+    from app.utils import get_password_hash
+    
+    user = User(
+        id=str(uuid.uuid4()),
+        email="test@example.com",
+        username="testuser",
+        hashed_password=get_password_hash("TestPassword123!"),
+        organization_id=test_org.id,
+        is_active=True,
+        is_admin=False
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+@pytest.fixture
+async def test_admin_user(db_session, test_org):
+    """Create test admin user"""
+    from app.utils import get_password_hash
+    
+    user = User(
+        id=str(uuid.uuid4()),
+        email="admin@example.com",
+        username="adminuser",
+        hashed_password=get_password_hash("AdminPassword123!"),
+        organization_id=test_org.id,
+        is_active=True,
+        is_admin=True
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+@pytest.fixture
+def test_user_token(test_user):
+    """Create JWT token for test user"""
+    return create_access_token(data={"sub": test_user.id})
+
+@pytest.fixture
+def admin_token(test_admin_user):
+    """Create JWT token for test admin"""
+    return create_access_token(data={"sub": test_admin_user.id})
+
+@pytest.fixture
+async def test_transaction(db_session, test_user, test_org):
+    """Create test emission transaction"""
+    tx = EmissionTransaction(
+        id=str(uuid.uuid4()),
+        organization_id=test_org.id,
+        description="Purchased 100 kWh electricity",
+        transaction_date=datetime.now(timezone.utc),
+        scope=2,
+        category="Electricity",
+        activity_value=100.0,
+        activity_unit="kWh",
+        emission_factor_value=0.4,
+        co2e_kg=40.0,
+        co2e_tonnes=0.04,
+        created_by_user_id=test_user.id
+    )
+    db_session.add(tx)
+    await db_session.commit()
+    await db_session.refresh(tx)
+    return tx
+
+@pytest.fixture
+async def async_client(db_session, test_user_token):
+    """Create async HTTP client for testing"""
+    from httpx import AsyncClient
+    from app.main import app
+    
+    # Override dependency for testing
+    async def override_get_db():
+        yield db_session
+    
+    from app.database import get_db
+    app.dependency_overrides[get_db] = override_get_db
+    
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        yield client
     
     app.dependency_overrides.clear()

@@ -103,9 +103,9 @@ class EmissionTransaction(Base):
     co2e_kg = Column(Float, nullable=False, index=True)  # Total CO2e in kilograms
     co2e_tonnes = Column(Float, nullable=False)  # Total CO2e in metric tonnes
     
-    # AI Classification
-    ai_scope_prediction = Column(Integer, nullable=True)
-    ai_confidence_score = Column(Float, nullable=True)
+    # AI Classification Fields
+    ai_scope_prediction = Column(Integer, nullable=True, index=True)
+    ai_confidence_score = Column(Float, nullable=True, index=True)
     ai_needs_review = Column(Boolean, default=False, index=True)
     
     # Metadata
@@ -117,6 +117,7 @@ class EmissionTransaction(Base):
     created_by_user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
     verified_by_user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
     verified_at = Column(DateTime(timezone=True), nullable=True)
+    manager_notes = Column(Text, nullable=True)
     
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
@@ -131,7 +132,7 @@ class EmissionTransaction(Base):
     verified_by_user = relationship(
         "User",
         foreign_keys=[verified_by_user_id],
-        back_populates="verified_transactions"
+        back_populates="verified_transactions" #back_populates="verified_classifications
     )
     emission_factor = relationship("EmissionFactor", back_populates="transactions")
     
@@ -140,6 +141,8 @@ class EmissionTransaction(Base):
         Index("idx_emission_org_date", "organization_id", "transaction_date"),
         Index("idx_emission_org_scope", "organization_id", "scope"),
         Index("idx_emission_org_category", "organization_id", "category"),
+        Index("idx_ai_needs_review_org", "organization_id", "ai_needs_review"),
+        Index("idx_verified_by_org", "organization_id", "verified_at"),
     )
 
 

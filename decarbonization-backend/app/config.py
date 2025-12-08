@@ -5,6 +5,7 @@ Using Pydantic Settings for environment variable management
 """
 
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from typing import List
 
 
@@ -30,6 +31,27 @@ class Settings(BaseSettings):
     # JWT
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_HOURS: int = 24
+
+    # Gemini Configuration
+    GEMINI_API_KEY: str = "test-api-key-default"
+    GEMINI_MODEL: str = "gemini-2.0-flash"
+
+    # DSPy Configuration
+    DSPY_LM_MODEL: str = "gemini-2.0-flash"
+    DSPY_TEMPERATURE: float = 0.3
+    DSPY_MAX_TOKENS: int = 150
+    
+    # Classifition Configuration
+    MIN_MAX_TOKENS: int = 150
+
+    # if < 80%
+    CLASSIFICATION_THRESHOLD: float = 0.80 # Flag
+    BATCH_CLASSIFICATION_SIZE: int = 50 # Process in batches
+
+    # Features Flags
+    ENABLE_DSPY_AGENTS: bool = True
+    ENABLE_CONFIDENCE_FLAGGING: bool = True
+    ENABLE_AUDIT_LOGGING: bool = True
     
     class Config:
         env_file = ".env"

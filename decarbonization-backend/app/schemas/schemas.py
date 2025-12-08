@@ -288,3 +288,57 @@ class CSVImportErrorResponse(BaseModel):
                 ]
             }
         }
+# ==================== Classification ==============
+
+class ClassificationRequest(BaseModel):
+    """Request to classify a transaction"""
+    transaction_id: str
+    description: str = Field(..., max_length=500)
+    category: str = Field(..., max_length=100)
+    activity_value: float = Field(..., gt=0)
+
+class ClassificationResponse(BaseModel):
+    """Response from classification"""
+    transaction_id: str
+    scope: int  # 1, 2, or 3
+    confidence: float  # 0.0 to 1.0
+    needs_review: bool
+    reasoning: dict
+    co2e_kg: float
+    co2e_tonnes: float
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "transaction_id": "tx-123",
+                "scope": 2,
+                "confidence": 0.95,
+                "needs_review": False,
+                "reasoning": {
+                    "scope_reasoning": "Electricity purchase from grid = Scope 2",
+                    "validation_issues": "None",
+                    "is_valid": True,
+                    "agent_confidences": {
+                        "scope": 0.98,
+                        "factor": 0.92,
+                        "validator": 0.95
+                    }
+                },
+                "co2e_kg": 40.0,
+                "co2e_tonnes": 0.04
+            }
+        }
+
+class ReviewQueueItem(BaseModel):
+    """Item in review queue"""
+    transaction_id: str
+    description: str
+    category: str
+    ai_prediction: Optional[int]
+    ai_confidence: Optional[float]
+    created_at: datetime
+
+class ReviewApproval(BaseModel):
+    """Manager approval of classification"""
+    approved_scope: int = Field(..., ge=1, le=3)
+    notes: str = Field(..., max_length=500)
