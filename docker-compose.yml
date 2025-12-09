@@ -1,0 +1,94 @@
+services:
+  # PostgreSQL with TimescaleDB
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: decarb_postgres
+    environment:
+      POSTGRES_USER: decarb_user
+      POSTGRES_PASSWORD: decarb_password
+      POSTGRES_DB: decarb_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U decarb_user -d decarb_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - decarb-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: decarb_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - decarb-network
+
+  # Backend API
+  api:
+    build:
+      context: ./decarbonization-backend
+      dockerfile: Dockerfile
+    container_name: decarb_api
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://decarb_user:decarb_password@postgres:5432/decarb_db
+      REDIS_URL: redis://redis:6379
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-prod}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      AI_MIN_CONFIDENCE_THRESHOLD: ${AI_MIN_CONFIDENCE_THRESHOLD:-0.80}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./decarbonization-backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - decarb-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+
+  # Frontend Dashboard
+  frontend:
+    build:
+      context: ./decarbonization-frontend
+      dockerfile: Dockerfile
+    container_name: decarb_frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - decarb-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  decarb-network:
+    driver: bridge
