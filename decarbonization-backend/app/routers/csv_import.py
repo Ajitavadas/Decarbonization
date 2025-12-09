@@ -1,107 +1,92 @@
-from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, BackgroundTasks
+# app/routers/csv_import.py
+"""
+CSV Import Router with AI Classification - FIXED Syntax Error
+Issue: background_tasks must come before parameters with defaults
+"""
+
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, BackgroundTasks, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone
 import uuid
-from typing import Dict, Optional
 import json
+import logging
+from typing import Optional, Dict
 
 import redis.asyncio as redis
 
-from app.database import get_db, async_session
+from app.database import get_db, async_session as app_async_session
 from app.auth.oauth2_scheme import get_current_user
-from app.models.models import User
+from app.models.models import User, EmissionTransaction, AuditLog
 from app.services.csv_service import CSVParsingService
 from app.services.import_service import ImportService
 
 router = APIRouter(prefix="/api/v1/import", tags=["csv_import"])
 
-# Result storage: use Redis when available, with in-memory fallback for dev/tests
-REDIS_URL = "redis://redis:6379/0"
-redis_client: Optional[redis.Redis] = redis.from_url(REDIS_URL, decode_responses=True)
+logger = logging.getLogger(__name__)
 
-# In-memory fallback store for import results (used if Redis unavailable)
-import_results: Dict[str, dict] = {}
+# Redis client (lazy init)
+_redis_client: Optional[redis.Redis] = None
 
+async def _get_redis() -> Optional[redis.Redis]:
+    """Get Redis client with fallback"""
+    global _redis_client
+    if _redis_client is None:
+        try:
+            _redis_client = redis.from_url("redis://redis:6379", decode_responses=True)
+            await _redis_client.ping()
+        except Exception as e:
+            logger.warning(f"Redis fallback active: {e}")
+            _redis_client = None
+    return _redis_client
 
-async def _store_import_result(import_id: str, data: dict) -> None:
-    """Persist import status/result to Redis if available, else in-memory."""
-    payload = json.dumps(data)
+# In-memory fallback
+_import_results: Dict[str, dict] = {}
+
+async def _store_result(import_id: str, data: dict) -> None:
+    """Store result in Redis or memory"""
     try:
+        redis_client = await _get_redis()
         if redis_client:
-            await redis_client.set(f"import:{import_id}", payload)
+            await redis_client.set(f"import:{import_id}", json.dumps(data), ex=7200)
             return
     except Exception:
-        # Fall back to in-memory store on any Redis error
         pass
-    import_results[import_id] = data
+    _import_results[import_id] = data
 
-
-async def _get_import_result(import_id: str) -> Optional[dict]:
-    """Retrieve import status/result from Redis or in-memory fallback."""
+async def _get_result(import_id: str) -> Optional[dict]:
+    """Retrieve result"""
     try:
+        redis_client = await _get_redis()
         if redis_client:
             raw = await redis_client.get(f"import:{import_id}")
             if raw:
                 return json.loads(raw)
     except Exception:
         pass
-    return import_results.get(import_id)
+    return _import_results.get(import_id)
 
-@router.post("/csv", status_code=202, response_model=dict)
+@router.post("/csv", status_code=status.HTTP_202_ACCEPTED)
 async def upload_csv(
+    background_tasks: BackgroundTasks,  # ✅ FIXED: Moved to first position
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    background_tasks: BackgroundTasks = BackgroundTasks()
+    current_user: User = Depends(get_current_user)
 ):
-    """
-    Upload CSV file for bulk emission import
-    
-    Args:
-        file: CSV or XLSX file to upload
-        db: Database session
-        current_user: Authenticated user
-        background_tasks: Background task runner
-        
-    Returns:
-        {
-            "import_id": "uuid-string",
-            "status": "pending",
-            "message": "File accepted. Processing started."
-        }
-    """
-    
-    # Validate file type
+    """Upload CSV/XLSX for bulk import"""
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename required")
     
     if not file.filename.endswith(('.csv', '.xlsx')):
-        raise HTTPException(
-            status_code=400,
-            detail="File must be CSV or XLSX format"
-        )
+        raise HTTPException(status_code=400, detail="File must be CSV or XLSX")
     
-    # Read file content
     content = await file.read()
-    
-    # Validate file size (max 50MB)
     if len(content) > 50 * 1024 * 1024:
-        raise HTTPException(
-            status_code=413,
-            detail="File too large. Maximum size: 50MB"
-        )
-    
+        raise HTTPException(status_code=413, detail="File too large (max 50MB)")
     if len(content) == 0:
-        raise HTTPException(
-            status_code=400,
-            detail="File is empty"
-        )
+        raise HTTPException(status_code=400, detail="File is empty")
     
-    # Create import job record
     import_id = str(uuid.uuid4())
-    
-    # Initialize result entry
-    initial_result = {
+    await _store_result(import_id, {
         "import_id": import_id,
         "status": "pending",
         "user_id": current_user.id,
@@ -113,58 +98,44 @@ async def upload_csv(
         "failed_rows": 0,
         "errors": [],
         "processing_time_seconds": 0
-    }
-    await _store_import_result(import_id, initial_result)
+    })
     
-    # Queue for background processing
-    background_tasks.add_task(
-        process_csv_import,
-        import_id=import_id,
-        file_content=content,
-        filename=file.filename,
-        user_id=current_user.id,
-        org_id=current_user.organization_id,
-    )
+    background_tasks.add_task(process_import, import_id, content, file.filename, current_user.id, current_user.organization_id)
     
-    return {
-        "import_id": import_id,
-        "status": "pending",
-        "message": "File accepted. Processing started."
-    }
+    return {"import_id": import_id, "status": "pending"}
 
-async def process_csv_import(
+async def process_import(
     import_id: str,
     file_content: bytes,
     filename: str,
     user_id: str,
     org_id: str,
 ):
-    """
-    Background task to process CSV import
-    """
-    from app.models.models import EmissionTransaction, AuditLog
+    """Background processor"""
+    from app import async_session
     
-    start_time = datetime.now(timezone.utc)
-    
-    # Dedicated DB session for background task
+    start = datetime.now(timezone.utc)
     async with async_session() as db:
         try:
-            # Parse file (CSV or XLSX)
-            if filename.lower().endswith(".csv"):
-                valid_rows, error_rows = CSVParsingService.parse_csv(file_content)
-            elif filename.lower().endswith(".xlsx"):
-                valid_rows, error_rows = CSVParsingService.parse_xlsx(file_content)
+            # Parse
+            if filename.lower().endswith('.csv'):
+                rows, errors = CSVParsingService.parse_csv(file_content)
             else:
-                valid_rows, error_rows = [], [{"row": 0, "error": "Unsupported file type"}]
+                rows, errors = CSVParsingService.parse_xlsx(file_content)
             
-            # Check for internal duplicates
-            unique_rows, duplicate_errors = await ImportService.check_duplicates(db, org_id, valid_rows)
-            error_rows.extend(duplicate_errors)
+            # AI Classification
+            if rows:
+                enhanced_rows, ai_errors = await CSVParsingService.classify_and_enhance_rows(rows)
+                errors.extend(ai_errors)
+            else:
+                enhanced_rows = rows
             
-            total_rows = len(valid_rows) + len(error_rows)
+            # Deduplicate
+            unique_rows, dup_errors = await ImportService.check_duplicates(db, org_id, enhanced_rows)
+            errors.extend(dup_errors)
             
-            # Process valid unique rows
-            transaction_objects = []
+            # Create transactions
+            transactions = []
             for row in unique_rows:
                 try:
                     co2e_kg, co2e_tonnes = CSVParsingService.calculate_co2e(
@@ -172,173 +143,86 @@ async def process_csv_import(
                         float(row['emission_factor_value'])
                     )
                     
-                    transaction = EmissionTransaction(
+                    final_scope = int(row['scope']) if row.get('ai_needs_review', True) else int(row['ai_scope_prediction'])
+                    
+                    transactions.append(EmissionTransaction(
                         organization_id=org_id,
                         description=row['description'].strip(),
-                        transaction_date=datetime.fromisoformat(
-                            row['transaction_date'].replace('Z', '+00:00')
-                        ),
-                        scope=int(row['scope']),
+                        transaction_date=datetime.fromisoformat(row['transaction_date'].replace('Z', '+00:00')),
+                        scope=final_scope,
                         category=row['category'].strip(),
                         activity_value=float(row['activity_value']),
                         activity_unit=row['activity_unit'].strip(),
                         emission_factor_value=float(row['emission_factor_value']),
                         co2e_kg=co2e_kg,
                         co2e_tonnes=co2e_tonnes,
+                        ai_scope_prediction=row.get('ai_scope_prediction'),
+                        ai_confidence_score=row.get('ai_confidence_score'),
+                        ai_needs_review=row.get('ai_needs_review', False),
                         supplier_name=row.get('supplier_name', '').strip() or None,
                         project_id=row.get('project_id', '').strip() or None,
                         notes=row.get('notes', '').strip() or None,
                         created_by_user_id=user_id
-                    )
-                    transaction_objects.append(transaction)
+                    ))
                 except Exception as e:
-                    error_rows.append({
-                        "row": row.get("_row_num", "?"),
-                        "error": f"Processing error: {str(e)}"
-                    })
+                    errors.append({"row": row.get('_row_num', '?'), "error": str(e)})
             
-            # Bulk insert
-            if transaction_objects:
-                successful, batch_errors = await ImportService.bulk_insert_transactions(db, transaction_objects)
-                for idx, err in enumerate(batch_errors, start=1):
-                    error_rows.append({"row": f"batch-{idx}", "error": err})
-            else:
-                successful = 0
+            # Insert
+            successful = 0
+            if transactions:
+                successful, batch_errors = await ImportService.bulk_insert_transactions(db, transactions)
+                errors.extend([{"row": f"batch-{i}", "error": err} for i, err in enumerate(batch_errors)])
             
-            # Processing time
-            processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
+            # Audit
+            duration = (datetime.now(timezone.utc) - start).total_seconds()
+            await ImportService.create_audit_log(db, org_id, user_id, import_id, successful, len(errors), filename, duration)
             
-            # Audit log
-            await ImportService.create_audit_log(
-                db=db,
-                org_id=org_id,
-                user_id=user_id,
-                import_id=import_id,
-                success_count=successful,
-                error_count=len(error_rows),
-                filename=filename,
-                processing_time=processing_time,
-            )
-            
-            # Persist result
-            result = {
+            await _store_result(import_id, {
                 "import_id": import_id,
                 "status": "completed",
                 "user_id": user_id,
                 "org_id": org_id,
                 "filename": filename,
-                "total_rows": total_rows,
+                "total_rows": len(rows) + len(errors),
                 "successful_rows": successful,
-                "failed_rows": len(error_rows),
-                "errors": error_rows,
-                "processing_time_seconds": round(processing_time, 2),
+                "failed_rows": len(errors),
+                "errors": errors,
+                "processing_time_seconds": round(duration, 2),
                 "completed_at": datetime.now(timezone.utc).isoformat()
-            }
-            await _store_import_result(import_id, result)
-        
+            })
+            
         except Exception as e:
-            processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
-            
-            # Log error
-            error_log = AuditLog(
-                organization_id=org_id,
-                user_id=user_id,
-                action="CSV_BULK_IMPORT_FAILED",
-                resource_type="EmissionTransaction",
-                description=f"CSV import failed: {str(e)}"
-            )
-            db.add(error_log)
-            await db.commit()
-            
-            # Persist failure result
-            result = {
+            logger.error(f"Import failed {import_id}: {str(e)}")
+            await _store_result(import_id, {
                 "import_id": import_id,
                 "status": "failed",
                 "user_id": user_id,
                 "org_id": org_id,
                 "filename": filename,
                 "error": str(e),
-                "processing_time_seconds": round(processing_time, 2),
                 "failed_at": datetime.now(timezone.utc).isoformat()
-            }
-            await _store_import_result(import_id, result)
+            })
 
-@router.get("/csv/{import_id}", response_model=dict)
-async def get_import_status(
-    import_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Get status and results of CSV import
-    
-    Args:
-        import_id: UUID of the import job
-        current_user: Authenticated user
-        
-    Returns:
-        {
-            "import_id": "uuid",
-            "status": "pending|processing|completed|failed",
-            "total_rows": 1000,
-            "successful_rows": 995,
-            "failed_rows": 5,
-            "errors": [
-                {"row": 15, "error": "Invalid scope value"}
-            ],
-            "processing_time_seconds": 12.5
-        }
-    """
-    
-    result = await _get_import_result(import_id)
+@router.get("/csv/{import_id}", status_code=200)
+async def get_import_status(import_id: str, current_user: User = Depends(get_current_user)):
+    """Get import status"""
+    result = await _get_result(import_id)
     if not result:
-        raise HTTPException(
-            status_code=404,
-            detail="Import job not found"
-        )
+        raise HTTPException(status_code=404, detail="Import not found")
     
-    # Verify user owns this import
     if result.get('user_id') != current_user.id:
-        raise HTTPException(
-            status_code=403,
-            detail="Unauthorized"
-        )
+        raise HTTPException(status_code=403, detail="Unauthorized")
     
     return result
 
-@router.get("/csv/{import_id}/errors")
-async def get_import_errors(
-    import_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Get detailed error report for import
-    
-    Returns:
-        {
-            "total_errors": 5,
-            "errors": [
-                {"row": 15, "error": "Invalid scope value"},
-                ...
-            ]
-        }
-    """
-    
-    result = await _get_import_result(import_id)
+@router.get("/csv/{import_id}/errors", status_code=200)
+async def get_import_errors(import_id: str, current_user: User = Depends(get_current_user)):
+    """Get import errors"""
+    result = await _get_result(import_id)
     if not result:
-        raise HTTPException(
-            status_code=404,
-            detail="Import job not found"
-        )
+        raise HTTPException(status_code=404, detail="Import not found")
     
-    # Verify user owns this import
     if result.get('user_id') != current_user.id:
-        raise HTTPException(
-            status_code=403,
-            detail="Unauthorized"
-        )
+        raise HTTPException(status_code=403, detail="Unauthorized")
     
-    return {
-        "import_id": import_id,
-        "total_errors": len(result.get('errors', [])),
-        "errors": result.get('errors', [])
-    }
+    return {"import_id": import_id, "errors": result.get('errors', [])}

@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: timescale/timescaledb:latest-pg16
     container_name: decarbonization_postgres
     environment:
       POSTGRES_USER: decarb_user
@@ -15,20 +15,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    networks:
-      - decarb-network
-
-  timescaledb-setup:
-    image: postgres:16-alpine
-    container_name: timescaledb_setup
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      PGPASSWORD: decarb_password
-    command: >
-      sh -c "psql -h postgres -U decarb_user -d decarb_db -c 
-      'CREATE EXTENSION IF NOT EXISTS timescaledb;'"
     networks:
       - decarb-network
 
@@ -59,6 +45,8 @@ services:
       DATABASE_URL: postgresql+asyncpg://decarb_user:decarb_password@postgres:5432/decarb_db
       REDIS_URL: redis://redis:6379
       SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-prod}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      AI_MIN_CONFIDENCE_THRESHOLD: ${AI_MIN_CONFIDENCE_THRESHOLD:-0.80}
     depends_on:
       postgres:
         condition: service_healthy
@@ -72,7 +60,7 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 5s
-      timeout: 5s
+      timeout: 30s
       retries: 5
 
 volumes:

@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"  # development, staging, production
     DEBUG: bool = False
     
+    # Gemini AI Configuration
+    GEMINI_API_KEY: str = "Gemini API Key"
+    AI_MIN_CONFIDENCE_THRESHOLD: float = 0.80 # 80% confidence threshold for AI responses
+    
     # Security
     SECRET_KEY: str = "your-secret-key-change-in-production"
     ALGORITHM: str = "HS256"
@@ -25,7 +29,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://decarb_user:decarb_password@localhost:5432/decarb_db"
     
     # CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8000"]
+    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8000", "http://localhost","http://127.0.0.1:3000"]
     
     # JWT
     JWT_ALGORITHM: str = "HS256"

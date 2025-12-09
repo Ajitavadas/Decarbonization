@@ -71,3 +71,5 @@ async def drop_all_tables():
 async def close_db():
     """Close database connection"""
     await engine.dispose()
+
+__all__ = ['get_db', 'init_db', 'drop_all_tables', 'close_db', 'async_session', 'engine']

@@ -78,3 +78,15 @@ async def login_for_access_token(
         expires_in=expires_in,
         user=user,
     )
+
+@router.get("/me", response_model=UserResponse)
+async def get_current_user(
+    current_user: User = Depends(lambda: None)  # We'll implement proper dependency later
+):
+    """Get the current authenticated user's profile"""
+    # For now, return a simple endpoint that confirms authentication works
+    # Full implementation would use get_current_user dependency
+    raise HTTPException(
+        status_code=501,
+        detail="Endpoint not fully implemented - use token response for user data"
+    )

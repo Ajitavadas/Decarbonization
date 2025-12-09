@@ -13,10 +13,9 @@ from contextlib import asynccontextmanager
 import logging
 
 from app.config import settings
-from app.routers import health
-from app.routers import organizations
+from app.routers import health, organizations, copilot
 from app.routers.auth import router as auth_router
-from app.routers import csv_import
+from app.routers import csv_import, dashboard, emissions, reports
 from app.database import init_db, close_db
 
 # Configure logging
@@ -65,6 +64,10 @@ app.include_router(health.router, tags=["health"])
 app.include_router(auth_router, tags=["authentication"])
 app.include_router(organizations.router, tags=["organizations"])
 app.include_router(csv_import.router, tags=["csv_import"])
+app.include_router(dashboard.router, tags=["dashboard"])
+app.include_router(emissions.router, tags=["emissions"])
+app.include_router(reports.router, tags=["reports"])
+app.include_router(copilot.router, tags=["copilot"])
 
 
 # Root endpoint

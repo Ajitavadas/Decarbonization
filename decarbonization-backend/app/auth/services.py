@@ -37,11 +37,17 @@ async def get_or_create_organization(db: AsyncSession, org_name: str, org_slug: 
     
     return new_org_id
 
-async def authenticate_user(db: AsyncSession, email: str, password: str):
+async def authenticate_user(db: AsyncSession, username_or_email: str, password: str):
     """
-    Verifies user credentials. Returns User object or False.
+    Verifies user credentials using either username or email.
+    Returns User object or False.
     """
-    result = await db.execute(select(User).filter(User.email == email))
+    # Try to find user by email first, then by username
+    result = await db.execute(
+        select(User).filter(
+            (User.email == username_or_email) | (User.username == username_or_email)
+        )
+    )
     user = result.scalars().first()
 
     if not user:

@@ -74,6 +74,8 @@ class Organization(Base):
     emission_transactions = relationship("EmissionTransaction", back_populates="organization")
     emission_factors = relationship("EmissionFactor", back_populates="organization")
     audit_logs = relationship("AuditLog", back_populates="organization")
+    targets = relationship("EmissionTarget", back_populates="organization")
+    forecasts = relationship("ForecastData", back_populates="organization")
 
 
 class EmissionTransaction(Base):
@@ -224,3 +226,46 @@ class AuditLog(Base):
         Index("idx_audit_user_date", "user_id", "created_at"),
         Index("idx_audit_resource", "resource_type", "resource_id"),
     )
+
+class EmissionTarget(Base):
+    """Target tracking model (US-4.4)"""
+    __tablename__ = "emission_targets"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String(36), ForeignKey("organizations.id"), nullable=False)
+    
+    baseline_year = Column(Integer, nullable=False)
+    baseline_emissions = Column(Float, nullable=False)
+    target_year = Column(Integer, nullable=False)
+    target_reduction_percent = Column(Float, nullable=False)
+    target_emissions = Column(Float, nullable=False)
+    
+    scope_1_target = Column(Float, nullable=True)
+    scope_2_target = Column(Float, nullable=True)
+    scope_3_target = Column(Float, nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), 
+                       onupdate=lambda: datetime.now(timezone.utc))
+    
+    organization = relationship("Organization", back_populates="targets")
+
+
+class ForecastData(Base):
+    """Emissions forecasting data (US-4.5)"""
+    __tablename__ = "forecast_data"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String(36), ForeignKey("organizations.id"), nullable=False)
+    
+    forecast_date = Column(DateTime(timezone=True), nullable=False)
+    predicted_emissions = Column(Float, nullable=False)
+    confidence_lower = Column(Float, nullable=False)
+    confidence_upper = Column(Float, nullable=False)
+    
+    model_type = Column(String(50), nullable=False)  # "linear", "arima", etc.
+    accuracy_score = Column(Float, nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    
+    organization = relationship("Organization", back_populates="forecasts")

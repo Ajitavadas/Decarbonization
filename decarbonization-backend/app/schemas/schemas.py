@@ -8,7 +8,7 @@ Pydantic schemas for request/response validation
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 
 # ==================== User Schemas ====================
@@ -288,3 +288,68 @@ class CSVImportErrorResponse(BaseModel):
                 ]
             }
         }
+# Week 2 features
+
+class EmissionReviewRequest(BaseModel):
+    """Schema for reviewing AI classification (US-2.4)"""
+    approved: bool = Field(..., description="True to accept AI recommendation, False to override")
+    final_scope: Optional[int] = Field(None, ge=1, le=3, description="Manual scope if not approved")
+    review_notes: Optional[str] = Field(None, max_length=500, description="Explanation for override")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "approved": False,
+                "final_scope": 2,
+                "review_notes": "This is purchased electricity, not direct combustion"
+            }
+        }
+
+
+class EmissionReviewResponse(BaseModel):
+    """Schema for review response"""
+    transaction_id: str
+    final_scope: int
+    decision: str  # "AI_APPROVED" or "MANUAL_OVERRIDE"
+    reviewed_by: str
+    reviewed_at: datetime
+
+
+class DashboardResponse(BaseModel):
+    """Schema for dashboard data (US-2.3)"""
+    total_emissions_tonnes: float
+    scope_breakdown: Dict[int, float]
+    monthly_trend: List[Dict]
+    category_breakdown: List[Dict]
+    period: Dict[str, Optional[str]]
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "total_emissions_tonnes": 1234.567,
+                "scope_breakdown": {
+                    1: 345.123,
+                    2: 456.234,
+                    3: 433.210
+                },
+                "monthly_trend": [
+                    {"year": 2024, "month": 1, "date": "2024-01", "emissions_tonnes": 95.234}
+                ],
+                "category_breakdown": [
+                    {"category": "Purchased Electricity", "emissions_tonnes": 456.234, "transaction_count": 12}
+                ],
+                "period": {
+                    "start_date": "2024-01-01T00:00:00Z",
+                    "end_date": "2024-12-31T23:59:59Z"
+                }
+            }
+        }
+
+
+class FactorSearchRequest(BaseModel):
+    """Schema for emission factor search"""
+    scope: Optional[int] = Field(None, ge=1, le=3)
+    category: Optional[str] = None
+    region: Optional[str] = None
+    search_term: Optional[str] = None
+    limit: int = Field(100, ge=1, le=500)

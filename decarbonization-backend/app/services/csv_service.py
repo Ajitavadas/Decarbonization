@@ -2,6 +2,8 @@ import csv
 from io import StringIO, BytesIO
 from typing import List, Dict, Tuple
 from datetime import datetime
+from app.services.ai_classifier_service import ai_classifier
+
 
 try:
     from openpyxl import load_workbook
@@ -244,3 +246,46 @@ class CSVParsingService:
         co2e_tonnes = co2e_kg / 1000
         
         return round(co2e_kg, 3), round(co2e_tonnes, 6)
+
+    @staticmethod
+    async def classify_and_enhance_rows(
+        rows: List[Dict]
+    ) -> Tuple[List[Dict], List[Dict]]:
+        """
+        Enhance rows with AI scope classification
+        
+        Returns:
+            (enhanced_rows, ai_errors)
+        """
+        enhanced_rows = []
+        ai_errors = []
+        
+        for row in rows:
+            try:
+                # Call AI classifier
+                scope, confidence, needs_review = await ai_classifier.classify_transaction(
+                    description=row.get('description', ''),
+                    category=row.get('category', ''),
+                    supplier_name=row.get('supplier_name')
+                )
+                
+                # Update row with AI predictions
+                row['ai_scope_prediction'] = scope
+                row['ai_confidence_score'] = confidence
+                row['ai_needs_review'] = needs_review
+                
+                enhanced_rows.append(row)
+                
+            except Exception as e:
+                ai_errors.append({
+                    "row": row.get('_row_num', '?'),
+                    "error": f"AI classification failed: {str(e)}"
+                })
+                # Set defaults on failure
+                row['ai_scope_prediction'] = None
+                row['ai_confidence_score'] = 0.0
+                row['ai_needs_review'] = True
+                enhanced_rows.append(row)
+        
+        return enhanced_rows, ai_errors
+    
