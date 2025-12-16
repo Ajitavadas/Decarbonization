@@ -32,24 +32,13 @@ class CSVParsingService:
     VALID_SCOPES = [1, 2, 3]
     
     @staticmethod
-    def parse_csv(file_content: bytes, encoding: str = 'utf-8') -> Tuple[List[Dict], List[Dict]]:
+    def parse_csv(file_content: bytes, encoding: str = 'utf-8', validate: bool = True) -> Tuple[List[Dict], List[Dict]]:
         """
-        Parse CSV file with error handling
-        
-        Args:
-            file_content: Byte content of CSV file
-            encoding: File encoding (default: utf-8)
-            
-        Returns:
-            (valid_rows, error_rows)
-            
-        Raises:
-            Tuple containing:
-            - valid_rows: List of valid row dictionaries
-            - error_rows: List of error dictionaries with row number and error message
+        Parse CSV file.
+        If validate=True, filters validity.
+        If validate=False, returns all rows (as dicts) and empty errors (unless parse error).
         """
-        
-        # Try to decode with specified encoding, fallback to iso-8859-1
+        # ... decode logic ...
         try:
             text = file_content.decode(encoding)
         except UnicodeDecodeError:
@@ -58,7 +47,6 @@ class CSVParsingService:
             except Exception:
                 return [], [{"row": 0, "error": "Cannot decode file (unsupported encoding)"}]
         
-        # Handle different line endings
         text = text.replace('\r\n', '\n').replace('\r', '\n')
         
         try:
@@ -68,31 +56,31 @@ class CSVParsingService:
         
         if not csv_reader.fieldnames:
             return [], [{"row": 0, "error": "Empty CSV file or no header row"}]
-        
-        valid_rows = []
+            
+        rows = []
         error_rows = []
         
-        for row_num, row in enumerate(csv_reader, start=2):  # Start at 2 (header=1)
-            # Skip empty rows
+        for row_num, row in enumerate(csv_reader, start=2):
             if all(not cell.strip() if isinstance(cell, str) else not cell for cell in row.values()):
                 continue
             
-            is_valid, error_msg = CSVParsingService.validate_row(row, row_num)
-            
-            if is_valid:
-                # Add row number for tracking
-                row["_row_num"] = row_num
-                valid_rows.append(row)
+            if validate:
+                is_valid, error_msg = CSVParsingService.validate_row(row, row_num)
+                if is_valid:
+                    row["_row_num"] = row_num
+                    rows.append(row)
+                else:
+                    error_rows.append({"row": row_num, "error": error_msg})
             else:
-                error_rows.append({"row": row_num, "error": error_msg})
-        
-        return valid_rows, error_rows
+                row["_row_num"] = row_num
+                rows.append(row)
+                
+        return rows, error_rows
     
     @staticmethod
-    def parse_xlsx(file_content: bytes) -> Tuple[List[Dict], List[Dict]]:
+    def parse_xlsx(file_content: bytes, validate: bool = True) -> Tuple[List[Dict], List[Dict]]:
         """
         Parse XLSX file with error handling.
-        Falls back with a clear error if openpyxl is not installed.
         """
         if load_workbook is None:
             return [], [{"row": 0, "error": "XLSX parsing not available (missing openpyxl dependency)"}]
@@ -112,31 +100,48 @@ class CSVParsingService:
         headers = [str(h).strip() if h is not None else "" for h in headers]
         header_index = {h: idx for idx, h in enumerate(headers)}
 
-        valid_rows: List[Dict] = []
-        error_rows: List[Dict] = []
+        rows = []
+        error_rows = []
 
         row_num = 1  # header row
         for excel_row in rows_iter:
             row_num += 1
             row_dict: Dict[str, str] = {}
 
-            for col_name in list(CSVParsingService.REQUIRED_COLUMNS.keys()) + list(CSVParsingService.OPTIONAL_COLUMNS.keys()):
-                if col_name in header_index:
-                    val = excel_row[header_index[col_name]]
-                    row_dict[col_name] = "" if val is None else str(val)
+            # If not validating, we want ALL columns, not just required items?
+            # Actually, `parse_csv` uses `csv.DictReader` which blindly takes headers.
+            # Here we are manually constructing generic `row_dict`.
+            # If we want generic rows, we should capture all columns in headers.
+            
+            if not validate:
+                # Capture all columns corresponding to headers
+                for h, idx in header_index.items():
+                    if idx < len(excel_row):
+                        val = excel_row[idx]
+                        row_dict[h] = "" if val is None else str(val)
+            else:
+                # Capture specific known columns
+                for col_name in list(CSVParsingService.REQUIRED_COLUMNS.keys()) + list(CSVParsingService.OPTIONAL_COLUMNS.keys()):
+                    if col_name in header_index:
+                        val = excel_row[header_index[col_name]]
+                        row_dict[col_name] = "" if val is None else str(val)
 
             # Skip completely empty rows
             if all(not v.strip() for v in row_dict.values()):
                 continue
 
-            is_valid, error_msg = CSVParsingService.validate_row(row_dict, row_num)
-            if is_valid:
-                row_dict["_row_num"] = row_num
-                valid_rows.append(row_dict)
+            if validate:
+                is_valid, error_msg = CSVParsingService.validate_row(row_dict, row_num)
+                if is_valid:
+                    row_dict["_row_num"] = row_num
+                    rows.append(row_dict)
+                else:
+                    error_rows.append({"row": row_num, "error": error_msg})
             else:
-                error_rows.append({"row": row_num, "error": error_msg})
+                row_dict["_row_num"] = row_num
+                rows.append(row_dict)
 
-        return valid_rows, error_rows
+        return rows, error_rows
 
     @staticmethod
     def validate_row(row: Dict, row_num: int) -> Tuple[bool, str]:

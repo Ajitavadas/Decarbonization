@@ -12,7 +12,8 @@ from unittest.mock import patch, MagicMock
 import google.generativeai as genai
 
 from app.main import app
-from app.database import Base, get_db
+from app.database import get_db
+from app.models.models import Base
 from app.config import settings
 
 # Test database

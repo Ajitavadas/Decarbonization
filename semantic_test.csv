@@ -1,0 +1,4 @@
+Date of Usage,Power Consumed,Fuel Type,Measurement Unit,Carbon Factor,Notes,Scope Level
+2023-10-01,150.5,Electricity,kWh,0.5,Server consumption,2
+2023-10-02,200.0,Electricity,kWh,0.5,Server consumption,2
+2023-10-05,50.0,Natural Gas,therms,5.3,Heating,1

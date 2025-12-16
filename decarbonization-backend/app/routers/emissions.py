@@ -27,7 +27,7 @@ router = APIRouter(prefix="/api/v1/emissions", tags=["emissions"])
 async def create_emission_transaction(
     transaction_data: EmissionTransactionCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Create a new emission transaction
@@ -36,11 +36,7 @@ async def create_emission_transaction(
     - All calculations accurate to 3 decimal places
     - Audit trail shows source factor
     """
-    # Get user to access organization
-    user_result = await db.execute(select(User).where(User.id == current_user))
-    user = user_result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    user = current_user
     
     # Calculate CO2e
     co2e_kg, co2e_tonnes, audit_info = CalculationService.calculate_co2e(
@@ -65,7 +61,7 @@ async def create_emission_transaction(
         supplier_name=transaction_data.supplier_name,
         project_id=transaction_data.project_id,
         notes=transaction_data.notes,
-        created_by_user_id=current_user
+        created_by_user_id=current_user.id
     )
     
     db.add(transaction)
@@ -73,7 +69,7 @@ async def create_emission_transaction(
     # Create audit log
     audit_log = AuditLog(
         organization_id=user.organization_id,
-        user_id=current_user,
+        user_id=current_user.id,
         action="CREATE",
         resource_type="EmissionTransaction",
         resource_id=transaction.id,
@@ -90,7 +86,7 @@ async def create_emission_transaction(
 @router.get("/review-queue", response_model=List[EmissionTransactionResponse])
 async def get_review_queue(
     db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     limit: int = Query(50, ge=1, le=200)
 ):
     """
@@ -100,11 +96,7 @@ async def get_review_queue(
     - Review queue displays 50 items in under 5 minutes of review time
     - Managers can see AI recommendation, confidence score, and details
     """
-    # Get user's organization
-    user_result = await db.execute(select(User).where(User.id == current_user))
-    user = user_result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    user = current_user
     
     # Query transactions needing review
     query = select(EmissionTransaction).where(
@@ -126,7 +118,7 @@ async def review_transaction(
     transaction_id: str,
     review_data: EmissionReviewRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Approve or override AI classification (US-2.4)
@@ -143,9 +135,7 @@ async def review_transaction(
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
     
-    # Get user
-    user_result = await db.execute(select(User).where(User.id == current_user))
-    user = user_result.scalar_one_or_none()
+    user = current_user
     
     # Verify user belongs to same organization
     if transaction.organization_id != user.organization_id:
@@ -165,7 +155,7 @@ async def review_transaction(
         decision = "MANUAL_OVERRIDE"
     
     # Mark as verified
-    transaction.verified_by_user_id = current_user
+    transaction.verified_by_user_id = current_user.id
     transaction.verified_at = datetime.now(timezone.utc)
     transaction.ai_needs_review = False
     
@@ -176,7 +166,7 @@ async def review_transaction(
     # Create audit log
     audit_log = AuditLog(
         organization_id=transaction.organization_id,
-        user_id=current_user,
+        user_id=current_user.id,
         action=decision,
         resource_type="EmissionTransaction",
         resource_id=transaction.id,
@@ -197,7 +187,7 @@ async def review_transaction(
         "transaction_id": transaction.id,
         "final_scope": transaction.scope,
         "decision": decision,
-        "reviewed_by": current_user,
+        "reviewed_by": current_user.id,
         "reviewed_at": transaction.verified_at
     }
 
@@ -205,7 +195,7 @@ async def review_transaction(
 @router.get("", response_model=List[EmissionTransactionResponse])
 async def list_transactions(
     db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     scope: Optional[int] = Query(None, ge=1, le=3),
     category: Optional[str] = None,
     start_date: Optional[datetime] = None,
@@ -220,11 +210,7 @@ async def list_transactions(
     - Any combination of filters works correctly
     - Results update in under 500 milliseconds
     """
-    # Get user's organization
-    user_result = await db.execute(select(User).where(User.id == current_user))
-    user = user_result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    user = current_user
     
     # Build query
     query = select(EmissionTransaction).where(
@@ -252,14 +238,10 @@ async def list_transactions(
 @router.get("/stats", response_model=dict)
 async def get_emission_stats(
     db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Get emission statistics summary"""
-    # Get user's organization
-    user_result = await db.execute(select(User).where(User.id == current_user))
-    user = user_result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    user = current_user
     
     # Total emissions
     total_query = select(func.sum(EmissionTransaction.co2e_tonnes)).where(

@@ -1,7 +1,7 @@
 services:
   # PostgreSQL with TimescaleDB
   postgres:
-    image: timescale/timescaledb:latest-pg16
+    image: postgis/postgis:16-3.4
     container_name: decarb_postgres
     environment:
       POSTGRES_USER: decarb_user

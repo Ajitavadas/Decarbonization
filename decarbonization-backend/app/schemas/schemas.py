@@ -353,3 +353,40 @@ class FactorSearchRequest(BaseModel):
     region: Optional[str] = None
     search_term: Optional[str] = None
     limit: int = Field(100, ge=1, le=500)
+
+
+# ==================== Notification Schemas ====================
+
+class FlaggedEvent(BaseModel):
+    """Schema for events flagged by the Auditor"""
+    event_id: str
+    organization_id: str
+    event_type: str  # "gap", "anomaly", "compliance"
+    description: str
+    severity: str  # "low", "medium", "high", "critical"
+    details: Dict
+    created_at: datetime
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "event_id": "evt_123",
+                "organization_id": "org_abc",
+                "event_type": "gap",
+                "description": "Missing Scope 1 Heating",
+                "severity": "medium",
+                "details": {"facility": "Boston", "month": "January"},
+                "created_at": "2024-01-15T12:00:00Z"
+            }
+        }
+
+
+class NotificationMessage(BaseModel):
+    """Schema for WebSocket notifications"""
+    type: str  # "ping", "prompt", "alert"
+    user_id: str
+    content: str
+    event_ref: Optional[str] = None
+    timestamp: datetime
+    metadata: Optional[Dict] = None
+

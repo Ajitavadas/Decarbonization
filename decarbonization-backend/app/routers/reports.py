@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
 @router.get("/pdf", response_class=StreamingResponse)
 async def generate_pdf_report(
     db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None
 ):
@@ -36,8 +36,7 @@ async def generate_pdf_report(
     - Report includes all required sections
     """
     # Get user and organization
-    user_result = await db.execute(select(User).where(User.id == current_user))
-    user = user_result.scalar_one_or_none()
+    user = current_user
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     

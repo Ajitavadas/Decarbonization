@@ -1,7 +1,8 @@
 """Copilot Router - US-4.1"""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Body
 from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.auth.oauth2_scheme import get_current_user
@@ -11,12 +12,14 @@ from app.services.copilot_service import CopilotService
 router = APIRouter(prefix="/api/v1/copilot", tags=["copilot"])
 copilot = CopilotService()
 
+class CopilotQuery(BaseModel):
+    query: str
 
 @router.post("/query")
 async def query_copilot(
-    query: str,
+    query_data: CopilotQuery,
     db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Query Carbon Copilot (US-4.1)
@@ -26,15 +29,11 @@ async def query_copilot(
     - Responses in under 2 seconds
     - Handles 10+ question types
     """
-    # Get user's organization
-    user_result = await db.execute(select(User).where(User.id == current_user))
-    user = user_result.scalar_one_or_none()
-    
     result = await copilot.process_query(
         db=db,
-        org_id=user.organization_id,
-        user_query=query,
-        session_id=current_user
+        org_id=current_user.organization_id,
+        user_query=query_data.query,
+        session_id=current_user.id
     )
     
     return result

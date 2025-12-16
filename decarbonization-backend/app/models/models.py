@@ -269,3 +269,36 @@ class ForecastData(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     
     organization = relationship("Organization", back_populates="forecasts")
+
+
+class FlaggedEvent(Base):
+    """Model for flagged anomalies and gaps (Phase 2 - The Auditor)"""
+    __tablename__ = "flagged_events"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id = Column(String(36), ForeignKey("organizations.id"), nullable=False, index=True)
+    
+    # Event classification
+    type = Column(String(50), nullable=False, index=True)  # "anomaly", "gap"
+    severity = Column(String(20), nullable=False)  # "low", "medium", "high"
+    
+    # Details
+    description = Column(String(500), nullable=False)
+    details = Column(JSON, nullable=True)  # Store specific data like "missing_month": "Feb"
+    
+    # Status tracking
+    status = Column(String(50), default="open", index=True)  # "open", "resolved", "dismissed"
+    resolution_notes = Column(Text, nullable=True)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    resolved_by_user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    
+    # Relationships
+    organization = relationship("Organization", back_populates="flagged_events")
+    resolved_by_user = relationship("User", foreign_keys=[resolved_by_user_id])
+
+
+# Update Organization relationship to include flagged_events
+Organization.flagged_events = relationship("FlaggedEvent", back_populates="organization", cascade="all, delete-orphan")

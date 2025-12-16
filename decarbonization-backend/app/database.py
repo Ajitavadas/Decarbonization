@@ -51,7 +51,8 @@ async def init_db():
     async with engine.begin() as conn:
         # Import models to register them with Base
         from app.models.models import Base
-        
+        import app.models.agents  # Register AgentState
+
         # Create all tables
         await conn.run_sync(Base.metadata.create_all)
 
@@ -64,7 +65,8 @@ async def drop_all_tables():
     """
     async with engine.begin() as conn:
         from app.models.models import Base
-        
+        import app.models.agents
+
         await conn.run_sync(Base.metadata.drop_all)
 
 

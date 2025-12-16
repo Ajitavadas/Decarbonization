@@ -28,13 +28,16 @@ class CalculationService:
         "gj": 277.778,
         "btu": 0.000293071,
         "therm": 29.3071,
+        "therms": 29.3071,  # Added plural
         
         # Volume - Liquids
         "liter": 1.0,
         "litre": 1.0,
+        "liters": 1.0,  # Added plural
         "l": 1.0,
         "gallon": 3.78541,
         "gal": 3.78541,
+        "gallons": 3.78541,  # Added plural
         "m3": 1000.0,
         
         # Mass
@@ -43,7 +46,9 @@ class CalculationService:
         "gram": 0.001,
         "g": 0.001,
         "tonne": 1000.0,
+        "tonnes": 1000.0,  # Added plural
         "ton": 907.185,
+        "tons": 907.185,  # Added plural
         "lb": 0.453592,
         "pound": 0.453592,
         
@@ -52,11 +57,13 @@ class CalculationService:
         "kilometer": 1.0,
         "mile": 1.60934,
         "mi": 1.60934,
+        "miles": 1.60934, # Added plural
         "meter": 0.001,
         "m": 0.001,
         
         # Special
         "night": 1.0,
+        "nights": 1.0,
         "unit": 1.0,
         "passenger-km": 1.0,
     }
@@ -154,3 +161,91 @@ class CalculationService:
                 })
         
         return results
+
+    @staticmethod
+    def convert_to_base_unit(value: float, from_unit: str, to_unit: str) -> float:
+        """
+        Convert value from one unit to another using internal conversion table.
+        Standardizes on:
+        - Energy: kwh
+        - Mass: kg
+        - Volume: liter
+        - Distance: km
+        """
+        from_unit = from_unit.lower().strip()
+        to_unit = to_unit.lower().strip()
+        
+        if from_unit == to_unit:
+            return value
+
+        # Direct conversion if to_unit is base unit (factor=1.0 in table)
+        # However, our table is normalized to base unit = 1.0. 
+        # So to convert FROM 'kj' TO 'mj': 
+        # val_in_base = val * factor_from
+        # result = val_in_base / factor_to
+        
+        factor_from = CalculationService.UNIT_CONVERSIONS.get(from_unit)
+        factor_to = CalculationService.UNIT_CONVERSIONS.get(to_unit)
+        
+        if not factor_from or not factor_to:
+             raise ValueError(f"Unsupported unit conversion: {from_unit} -> {to_unit}")
+             
+        # Convert to base, then to target
+        value_base = value * factor_from
+        return value_base / factor_to
+
+    @staticmethod
+    async def calculate_emissions(event: "StandardizedEmissionEvent") -> "EmissionResult":
+        """
+        Calculate emissions for a standardized event (US-3.1)
+        
+        Logic:
+        1. Determine Factor (Mocked for now - always 0.5 kgCO2e/kWh for electricity)
+        2. Convert Activity to Factor Unit
+        3. Calculate Location-Based
+        4. Calculate Market-Based (Dual Reporting)
+        """
+        from app.schemas.emissions import EmissionResult
+        
+        # 1. MOCK: Get Factor
+        # Real logic would use EmissionFactorService.match(event)
+        # For now, hardcoded mock
+        mock_factor = {
+            "value": 0.5, # kgCO2e / kWh (mock)
+            "unit": "kg",
+            "denominator": "kwh",
+            "name": "Mock Grid Average",
+            "source": "Mock DB"
+        }
+        
+        # 2. Convert Activity
+        # Target unit is the factor's denominator
+        try:
+           converted_activity = CalculationService.convert_to_base_unit(
+               event.activity_value, 
+               event.activity_unit, 
+               mock_factor["denominator"]
+           )
+        except ValueError:
+            # Fallback if conversion fails (e.g. unknown unit), just treat as 1:1 for MVP if compatible
+            # Or raise error. Let's log and re-raise for robustness
+            logger.warning(f"Unit conversion failed for {event.activity_unit} -> {mock_factor['denominator']}")
+            raise
+
+        # 3. Location-Based Calculation
+        location_co2e_kg = converted_activity * mock_factor["value"]
+        
+        # 4. Market-Based Calculation
+        # Rule: If market instruments (RECs) exist, market_based = 0 (assuming 100% matched for MVP logic)
+        # Otherwise, falls back to location-based (Grid Mix)
+        if event.market_instruments:
+             market_co2e_kg = 0.0
+        else:
+             market_co2e_kg = location_co2e_kg
+
+        return EmissionResult(
+            location_based_co2e_kg=round(location_co2e_kg, 4),
+            market_based_co2e_kg=round(market_co2e_kg, 4),
+            factor_used=mock_factor,
+            calculation_method="standard_factor_mock"
+        )

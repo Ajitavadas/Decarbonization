@@ -6,6 +6,8 @@ Pytest Configuration - FIXED: Import Base from correct module
 import asyncio
 from typing import AsyncGenerator, Generator
 from unittest.mock import patch, MagicMock
+from datetime import datetime, timezone
+import uuid
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
@@ -16,8 +18,9 @@ from sqlalchemy.orm import sessionmaker
 from app.main import app
 from app.database import get_db
 from app.models.models import Base  # ✅ FIXED: Import from models, not database
+import app.models.agents  # Register AgentState
 from app.config import settings
-from app.models.models import Organization, User
+from app.models.models import Organization, User, EmissionTransaction
 from app.utils import get_password_hash
 import google.generativeai as genai
 
@@ -53,9 +56,8 @@ async def setup_database():
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
     """Transaction isolation per test"""
     async with TestingSessionLocal() as session:
-        async with session.begin():
-            yield session
-        # Transaction automatically rolls back here
+        yield session
+        await session.rollback()
 
 @pytest_asyncio.fixture(scope="function")
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
@@ -103,7 +105,8 @@ def mock_gemini():
 # Test data fixtures
 @pytest_asyncio.fixture
 async def test_org(db_session):
-    org = Organization(id="test-org-123", name="Test Org", slug="test-org", is_active=True)
+    unique_id = str(uuid.uuid4())
+    org = Organization(id=unique_id, name="Test Org", slug=f"test-org-{unique_id}", is_active=True)
     db_session.add(org)
     await db_session.flush()
     await db_session.refresh(org)
@@ -111,10 +114,11 @@ async def test_org(db_session):
 
 @pytest_asyncio.fixture
 async def test_user(db_session, test_org):
+    unique_id = str(uuid.uuid4())
     user = User(
-        id="test-user-123",
-        email="test@example.com",
-        username="testuser",
+        id=unique_id,
+        email=f"test-{unique_id}@example.com",
+        username=f"testuser-{unique_id}",
         hashed_password=get_password_hash("TestPass123!"),
         full_name="Test User",
         organization_id=test_org.id,

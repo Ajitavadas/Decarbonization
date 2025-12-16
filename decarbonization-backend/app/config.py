@@ -27,7 +27,8 @@ class Settings(BaseSettings):
     
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://decarb_user:decarb_password@localhost:5432/decarb_db"
-    
+    REDIS_URL: str = "redis://localhost:6379/0"
+
     # CORS
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8000", "http://localhost","http://127.0.0.1:3000"]
     

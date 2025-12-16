@@ -1,0 +1,200 @@
+decarb_api  |     return await dependant.call(**values)
+decarb_api  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+decarb_api  |   File "/app/app/routers/csv_import.py", line 92, in upload_csv
+decarb_api  |     "user_id": current_user.id,
+decarb_api  |                ^^^^^^^^^^^^^^^
+decarb_api  | AttributeError: 'str' object has no attribute 'id'
+decarb_api  | 2025-12-12 11:10:07,386 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+decarb_api  | INFO:sqlalchemy.engine.Engine:BEGIN (implicit)
+decarb_api  | 2025-12-12 11:10:07,388 INFO sqlalchemy.engine.Engine SELECT users.id, users.email, users.username, users.hashed_password, users.full_name, users.is_active, users.is_admin, users.organization_id, users.created_at, users.updated_at, users.last_login 
+decarb_api  | FROM users 
+decarb_api  | WHERE users.id = $1::VARCHAR
+decarb_api  | 2025-12-12 11:10:07,388 INFO sqlalchemy.engine.Engine [generated in 0.00020s] ('54601788-d4a9-428b-bdbb-ee5cb0952376',)
+decarb_api  | INFO:sqlalchemy.engine.Engine:SELECT users.id, users.email, users.username, users.hashed_password, users.full_name, users.is_active, users.is_admin, users.organization_id, users.created_at, users.updated_at, users.last_login 
+decarb_api  | FROM users 
+decarb_api  | WHERE users.id = $1::VARCHAR
+decarb_api  | INFO:sqlalchemy.engine.Engine:[generated in 0.00020s] ('54601788-d4a9-428b-bdbb-ee5cb0952376',)
+decarb_api  | INFO:sqlalchemy.engine.Engine:SELECT sum(emission_transactions.co2e_tonnes) AS sum_1 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR
+decarb_api  | INFO:sqlalchemy.engine.Engine:[generated in 0.00047s] ('org-cb7595b3',)
+decarb_api  | 2025-12-12 11:10:07,399 INFO sqlalchemy.engine.Engine SELECT sum(emission_transactions.co2e_tonnes) AS sum_1 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR
+decarb_api  | 2025-12-12 11:10:07,399 INFO sqlalchemy.engine.Engine [generated in 0.00047s] ('org-cb7595b3',)
+decarb_api  | 2025-12-12 11:10:07,406 INFO sqlalchemy.engine.Engine SELECT emission_transactions.scope, sum(emission_transactions.co2e_tonnes) AS total 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR GROUP BY emission_transactions.scope
+decarb_api  | 2025-12-12 11:10:07,407 INFO sqlalchemy.engine.Engine [generated in 0.00032s] ('org-cb7595b3',)
+decarb_api  | INFO:sqlalchemy.engine.Engine:SELECT emission_transactions.scope, sum(emission_transactions.co2e_tonnes) AS total 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR GROUP BY emission_transactions.scope
+decarb_api  | INFO:sqlalchemy.engine.Engine:[generated in 0.00032s] ('org-cb7595b3',)
+decarb_api  | INFO:sqlalchemy.engine.Engine:SELECT EXTRACT(year FROM emission_transactions.transaction_date) AS year, EXTRACT(month FROM emission_transactions.transaction_date) AS month, sum(emission_transactions.co2e_tonnes) AS total 
+decarb_api  | 2025-12-12 11:10:07,412 INFO sqlalchemy.engine.Engine SELECT EXTRACT(year FROM emission_transactions.transaction_date) AS year, EXTRACT(month FROM emission_transactions.transaction_date) AS month, sum(emission_transactions.co2e_tonnes) AS total 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR AND emission_transactions.transaction_date >= $2::TIMESTAMP WITH TIME ZONE AND emission_transactions.transaction_date <= $3::TIMESTAMP WITH TIME ZONE GROUP BY year, month ORDER BY year, month
+decarb_api  | 2025-12-12 11:10:07,413 INFO sqlalchemy.engine.Engine [generated in 0.00041s] ('org-cb7595b3', datetime.datetime(2024, 12, 17, 11, 10, 7, 410472, tzinfo=datetime.timezone.utc), datetime.datetime(2025, 12, 12, 11, 10, 7, 410472, tzinfo=datetime.timezone.utc))
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR AND emission_transactions.transaction_date >= $2::TIMESTAMP WITH TIME ZONE AND emission_transactions.transaction_date <= $3::TIMESTAMP WITH TIME ZONE GROUP BY year, month ORDER BY year, month
+decarb_api  | INFO:sqlalchemy.engine.Engine:[generated in 0.00041s] ('org-cb7595b3', datetime.datetime(2024, 12, 17, 11, 10, 7, 410472, tzinfo=datetime.timezone.utc), datetime.datetime(2025, 12, 12, 11, 10, 7, 410472, tzinfo=datetime.timezone.utc))
+decarb_api  | INFO:sqlalchemy.engine.Engine:SELECT emission_transactions.category, sum(emission_transactions.co2e_tonnes) AS total, count(emission_transactions.id) AS count 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR GROUP BY emission_transactions.category ORDER BY sum(emission_transactions.co2e_tonnes) DESC 
+decarb_api  |  LIMIT $2::INTEGER
+decarb_api  | INFO:sqlalchemy.engine.Engine:[generated in 0.00026s] ('org-cb7595b3', 10)
+decarb_api  | 2025-12-12 11:10:07,421 INFO sqlalchemy.engine.Engine SELECT emission_transactions.category, sum(emission_transactions.co2e_tonnes) AS total, count(emission_transactions.id) AS count 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR GROUP BY emission_transactions.category ORDER BY sum(emission_transactions.co2e_tonnes) DESC 
+decarb_api  |  LIMIT $2::INTEGER
+decarb_api  | 2025-12-12 11:10:07,421 INFO sqlalchemy.engine.Engine [generated in 0.00026s] ('org-cb7595b3', 10)
+decarb_api  | INFO:sqlalchemy.engine.Engine:ROLLBACK
+decarb_api  | 2025-12-12 11:10:07,426 INFO sqlalchemy.engine.Engine ROLLBACK
+decarb_api  | INFO:     172.18.0.1:48612 - "GET /api/v1/dashboard HTTP/1.1" 200 OK
+decarb_api  | INFO:sqlalchemy.engine.Engine:BEGIN (implicit)
+decarb_api  | 2025-12-12 11:10:07,502 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+decarb_api  | INFO:sqlalchemy.engine.Engine:SELECT users.id, users.email, users.username, users.hashed_password, users.full_name, users.is_active, users.is_admin, users.organization_id, users.created_at, users.updated_at, users.last_login 
+decarb_api  | FROM users 
+decarb_api  | WHERE users.id = $1::VARCHAR
+decarb_api  | 2025-12-12 11:10:07,502 INFO sqlalchemy.engine.Engine SELECT users.id, users.email, users.username, users.hashed_password, users.full_name, users.is_active, users.is_admin, users.organization_id, users.created_at, users.updated_at, users.last_login 
+decarb_api  | FROM users 
+decarb_api  | WHERE users.id = $1::VARCHAR
+decarb_api  | INFO:sqlalchemy.engine.Engine:[cached since 0.1149s ago] ('54601788-d4a9-428b-bdbb-ee5cb0952376',)
+decarb_api  | 2025-12-12 11:10:07,502 INFO sqlalchemy.engine.Engine [cached since 0.1149s ago] ('54601788-d4a9-428b-bdbb-ee5cb0952376',)
+decarb_api  | 2025-12-12 11:10:07,511 INFO sqlalchemy.engine.Engine SELECT emission_transactions.id, emission_transactions.organization_id, emission_transactions.description, emission_transactions.transaction_date, emission_transactions.scope, emission_transactions.category, emission_transactions.activity_value, emission_transactions.activity_unit, emission_transactions.emission_factor_id, emission_transactions.emission_factor_value, emission_transactions.co2e_kg, emission_transactions.co2e_tonnes, emission_transactions.ai_scope_prediction, emission_transactions.ai_confidence_score, emission_transactions.ai_needs_review, emission_transactions.supplier_name, emission_transactions.project_id, emission_transactions.notes, emission_transactions.created_by_user_id, emission_transactions.verified_by_user_id, emission_transactions.verified_at, emission_transactions.created_at, emission_transactions.updated_at 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR ORDER BY emission_transactions.transaction_date DESC 
+decarb_api  |  LIMIT $2::INTEGER OFFSET $3::INTEGER
+decarb_api  | 2025-12-12 11:10:07,511 INFO sqlalchemy.engine.Engine [generated in 0.00026s] ('org-cb7595b3', 100, 0)
+decarb_api  | INFO:sqlalchemy.engine.Engine:SELECT emission_transactions.id, emission_transactions.organization_id, emission_transactions.description, emission_transactions.transaction_date, emission_transactions.scope, emission_transactions.category, emission_transactions.activity_value, emission_transactions.activity_unit, emission_transactions.emission_factor_id, emission_transactions.emission_factor_value, emission_transactions.co2e_kg, emission_transactions.co2e_tonnes, emission_transactions.ai_scope_prediction, emission_transactions.ai_confidence_score, emission_transactions.ai_needs_review, emission_transactions.supplier_name, emission_transactions.project_id, emission_transactions.notes, emission_transactions.created_by_user_id, emission_transactions.verified_by_user_id, emission_transactions.verified_at, emission_transactions.created_at, emission_transactions.updated_at 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR ORDER BY emission_transactions.transaction_date DESC 
+decarb_api  |  LIMIT $2::INTEGER OFFSET $3::INTEGER
+decarb_api  | INFO:sqlalchemy.engine.Engine:[generated in 0.00026s] ('org-cb7595b3', 100, 0)
+decarb_api  | INFO:sqlalchemy.engine.Engine:ROLLBACK
+decarb_api  | 2025-12-12 11:10:07,518 INFO sqlalchemy.engine.Engine ROLLBACK
+decarb_api  | INFO:     172.18.0.1:48628 - "GET /api/v1/emissions HTTP/1.1" 200 OK
+decarb_api  | 2025-12-12 11:10:07,582 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+decarb_api  | INFO:sqlalchemy.engine.Engine:BEGIN (implicit)
+decarb_api  | 2025-12-12 11:10:07,582 INFO sqlalchemy.engine.Engine SELECT users.id, users.email, users.username, users.hashed_password, users.full_name, users.is_active, users.is_admin, users.organization_id, users.created_at, users.updated_at, users.last_login 
+decarb_api  | FROM users 
+decarb_api  | WHERE users.id = $1::VARCHAR
+decarb_api  | 2025-12-12 11:10:07,582 INFO sqlalchemy.engine.Engine [cached since 0.1945s ago] ('54601788-d4a9-428b-bdbb-ee5cb0952376',)
+decarb_api  | INFO:sqlalchemy.engine.Engine:SELECT users.id, users.email, users.username, users.hashed_password, users.full_name, users.is_active, users.is_admin, users.organization_id, users.created_at, users.updated_at, users.last_login 
+decarb_api  | FROM users 
+decarb_api  | WHERE users.id = $1::VARCHAR
+decarb_api  | INFO:sqlalchemy.engine.Engine:[cached since 0.1945s ago] ('54601788-d4a9-428b-bdbb-ee5cb0952376',)
+decarb_api  | 2025-12-12 11:10:07,589 INFO sqlalchemy.engine.Engine SELECT sum(emission_transactions.co2e_tonnes) AS sum_1 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR
+decarb_api  | 2025-12-12 11:10:07,589 INFO sqlalchemy.engine.Engine [cached since 0.1905s ago] ('org-cb7595b3',)
+decarb_api  | INFO:sqlalchemy.engine.Engine:SELECT sum(emission_transactions.co2e_tonnes) AS sum_1 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR
+decarb_api  | INFO:sqlalchemy.engine.Engine:[cached since 0.1905s ago] ('org-cb7595b3',)
+decarb_api  | ERROR:app.services.copilot_service:Copilot query failed: 404 models/gemini-2.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+decarb_api  | INFO:sqlalchemy.engine.Engine:ROLLBACK
+decarb_api  | 2025-12-12 11:10:07,949 INFO sqlalchemy.engine.Engine ROLLBACK
+decarb_api  | INFO:     172.18.0.1:48640 - "POST /api/v1/copilot/query HTTP/1.1" 200 OK
+decarb_api  | INFO:sqlalchemy.engine.Engine:BEGIN (implicit)
+decarb_api  | 2025-12-12 11:10:08,011 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+decarb_api  | 2025-12-12 11:10:08,012 INFO sqlalchemy.engine.Engine SELECT users.id, users.email, users.username, users.hashed_password, users.full_name, users.is_active, users.is_admin, users.organization_id, users.created_at, users.updated_at, users.last_login 
+decarb_api  | FROM users 
+decarb_api  | WHERE users.id = $1::VARCHAR
+decarb_api  | 2025-12-12 11:10:08,012 INFO sqlalchemy.engine.Engine [cached since 0.6242s ago] ('54601788-d4a9-428b-bdbb-ee5cb0952376',)
+decarb_api  | INFO:sqlalchemy.engine.Engine:SELECT users.id, users.email, users.username, users.hashed_password, users.full_name, users.is_active, users.is_admin, users.organization_id, users.created_at, users.updated_at, users.last_login 
+decarb_api  | FROM users 
+decarb_api  | WHERE users.id = $1::VARCHAR
+decarb_api  | INFO:sqlalchemy.engine.Engine:[cached since 0.6242s ago] ('54601788-d4a9-428b-bdbb-ee5cb0952376',)
+decarb_api  | INFO:sqlalchemy.engine.Engine:SELECT emission_transactions.id, emission_transactions.organization_id, emission_transactions.description, emission_transactions.transaction_date, emission_transactions.scope, emission_transactions.category, emission_transactions.activity_value, emission_transactions.activity_unit, emission_transactions.emission_factor_id, emission_transactions.emission_factor_value, emission_transactions.co2e_kg, emission_transactions.co2e_tonnes, emission_transactions.ai_scope_prediction, emission_transactions.ai_confidence_score, emission_transactions.ai_needs_review, emission_transactions.supplier_name, emission_transactions.project_id, emission_transactions.notes, emission_transactions.created_by_user_id, emission_transactions.verified_by_user_id, emission_transactions.verified_at, emission_transactions.created_at, emission_transactions.updated_at 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR AND emission_transactions.transaction_date >= $2::TIMESTAMP WITH TIME ZONE
+decarb_api  | INFO:sqlalchemy.engine.Engine:[generated in 0.00025s] ('org-cb7595b3', datetime.datetime(2025, 9, 13, 11, 10, 8, 19862, tzinfo=datetime.timezone.utc))
+decarb_api  | 2025-12-12 11:10:08,021 INFO sqlalchemy.engine.Engine SELECT emission_transactions.id, emission_transactions.organization_id, emission_transactions.description, emission_transactions.transaction_date, emission_transactions.scope, emission_transactions.category, emission_transactions.activity_value, emission_transactions.activity_unit, emission_transactions.emission_factor_id, emission_transactions.emission_factor_value, emission_transactions.co2e_kg, emission_transactions.co2e_tonnes, emission_transactions.ai_scope_prediction, emission_transactions.ai_confidence_score, emission_transactions.ai_needs_review, emission_transactions.supplier_name, emission_transactions.project_id, emission_transactions.notes, emission_transactions.created_by_user_id, emission_transactions.verified_by_user_id, emission_transactions.verified_at, emission_transactions.created_at, emission_transactions.updated_at 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR AND emission_transactions.transaction_date >= $2::TIMESTAMP WITH TIME ZONE
+decarb_api  | 2025-12-12 11:10:08,021 INFO sqlalchemy.engine.Engine [generated in 0.00025s] ('org-cb7595b3', datetime.datetime(2025, 9, 13, 11, 10, 8, 19862, tzinfo=datetime.timezone.utc))
+decarb_api  | INFO:app.services.anomaly_service:Not enough data for anomaly detection
+decarb_api  | INFO:sqlalchemy.engine.Engine:ROLLBACK
+decarb_api  | 2025-12-12 11:10:08,028 INFO sqlalchemy.engine.Engine ROLLBACK
+decarb_api  | INFO:     172.18.0.1:49778 - "GET /api/v1/emissions/anomalies HTTP/1.1" 200 OK
+decarb_api  | INFO:sqlalchemy.engine.Engine:BEGIN (implicit)
+decarb_api  | INFO:sqlalchemy.engine.Engine:SELECT users.id, users.email, users.username, users.hashed_password, users.full_name, users.is_active, users.is_admin, users.organization_id, users.created_at, users.updated_at, users.last_login 
+decarb_api  | FROM users 
+decarb_api  | WHERE users.id = $1::VARCHAR
+decarb_api  | INFO:sqlalchemy.engine.Engine:[cached since 0.7093s ago] ('54601788-d4a9-428b-bdbb-ee5cb0952376',)
+decarb_api  | 2025-12-12 11:10:08,096 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+decarb_api  | 2025-12-12 11:10:08,097 INFO sqlalchemy.engine.Engine SELECT users.id, users.email, users.username, users.hashed_password, users.full_name, users.is_active, users.is_admin, users.organization_id, users.created_at, users.updated_at, users.last_login 
+decarb_api  | FROM users 
+decarb_api  | WHERE users.id = $1::VARCHAR
+decarb_api  | 2025-12-12 11:10:08,097 INFO sqlalchemy.engine.Engine [cached since 0.7093s ago] ('54601788-d4a9-428b-bdbb-ee5cb0952376',)
+decarb_api  | INFO:sqlalchemy.engine.Engine:SELECT EXTRACT(year FROM emission_transactions.transaction_date) AS year, EXTRACT(month FROM emission_transactions.transaction_date) AS month, sum(emission_transactions.co2e_tonnes) AS total 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR AND emission_transactions.transaction_date >= $2::TIMESTAMP WITH TIME ZONE AND emission_transactions.transaction_date <= $3::TIMESTAMP WITH TIME ZONE GROUP BY year, month ORDER BY year, month
+decarb_api  | 2025-12-12 11:10:08,104 INFO sqlalchemy.engine.Engine SELECT EXTRACT(year FROM emission_transactions.transaction_date) AS year, EXTRACT(month FROM emission_transactions.transaction_date) AS month, sum(emission_transactions.co2e_tonnes) AS total 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR AND emission_transactions.transaction_date >= $2::TIMESTAMP WITH TIME ZONE AND emission_transactions.transaction_date <= $3::TIMESTAMP WITH TIME ZONE GROUP BY year, month ORDER BY year, month
+decarb_api  | 2025-12-12 11:10:08,104 INFO sqlalchemy.engine.Engine [cached since 0.6918s ago] ('org-cb7595b3', datetime.datetime(2023, 12, 23, 11, 10, 8, 103700, tzinfo=datetime.timezone.utc), datetime.datetime(2025, 12, 12, 11, 10, 8, 103700, tzinfo=datetime.timezone.utc))
+decarb_api  | INFO:sqlalchemy.engine.Engine:[cached since 0.6918s ago] ('org-cb7595b3', datetime.datetime(2023, 12, 23, 11, 10, 8, 103700, tzinfo=datetime.timezone.utc), datetime.datetime(2025, 12, 12, 11, 10, 8, 103700, tzinfo=datetime.timezone.utc))
+decarb_api  | INFO:sqlalchemy.engine.Engine:ROLLBACK
+decarb_api  | 2025-12-12 11:10:08,113 INFO sqlalchemy.engine.Engine ROLLBACK
+decarb_api  | INFO:     172.18.0.1:49782 - "GET /api/v1/emissions/forecast?months_ahead=6 HTTP/1.1" 200 OK
+decarb_api  | INFO:sqlalchemy.engine.Engine:BEGIN (implicit)
+decarb_api  | 2025-12-12 11:10:08,178 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+decarb_api  | 2025-12-12 11:10:08,178 INFO sqlalchemy.engine.Engine SELECT users.id, users.email, users.username, users.hashed_password, users.full_name, users.is_active, users.is_admin, users.organization_id, users.created_at, users.updated_at, users.last_login 
+decarb_api  | FROM users 
+decarb_api  | WHERE users.id = $1::VARCHAR
+decarb_api  | INFO:sqlalchemy.engine.Engine:SELECT users.id, users.email, users.username, users.hashed_password, users.full_name, users.is_active, users.is_admin, users.organization_id, users.created_at, users.updated_at, users.last_login 
+decarb_api  | FROM users 
+decarb_api  | WHERE users.id = $1::VARCHAR
+decarb_api  | INFO:sqlalchemy.engine.Engine:[cached since 0.7909s ago] ('54601788-d4a9-428b-bdbb-ee5cb0952376',)
+decarb_api  | 2025-12-12 11:10:08,178 INFO sqlalchemy.engine.Engine [cached since 0.7909s ago] ('54601788-d4a9-428b-bdbb-ee5cb0952376',)
+decarb_api  | INFO:sqlalchemy.engine.Engine:SELECT organizations.id, organizations.name, organizations.slug, organizations.description, organizations.is_active, organizations.created_at, organizations.updated_at 
+decarb_api  | FROM organizations 
+decarb_api  | WHERE organizations.id = $1::VARCHAR
+decarb_api  | INFO:sqlalchemy.engine.Engine:[generated in 0.00035s] ('org-cb7595b3',)
+decarb_api  | 2025-12-12 11:10:08,187 INFO sqlalchemy.engine.Engine SELECT organizations.id, organizations.name, organizations.slug, organizations.description, organizations.is_active, organizations.created_at, organizations.updated_at 
+decarb_api  | FROM organizations 
+decarb_api  | WHERE organizations.id = $1::VARCHAR
+decarb_api  | 2025-12-12 11:10:08,187 INFO sqlalchemy.engine.Engine [generated in 0.00035s] ('org-cb7595b3',)
+decarb_api  | 2025-12-12 11:10:08,192 INFO sqlalchemy.engine.Engine SELECT sum(emission_transactions.co2e_tonnes) AS sum_1 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR
+decarb_api  | 2025-12-12 11:10:08,192 INFO sqlalchemy.engine.Engine [cached since 0.7936s ago] ('org-cb7595b3',)
+decarb_api  | INFO:sqlalchemy.engine.Engine:SELECT sum(emission_transactions.co2e_tonnes) AS sum_1 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR
+decarb_api  | INFO:sqlalchemy.engine.Engine:[cached since 0.7936s ago] ('org-cb7595b3',)
+decarb_api  | INFO:sqlalchemy.engine.Engine:SELECT emission_transactions.scope, sum(emission_transactions.co2e_tonnes) AS total 
+decarb_api  | 2025-12-12 11:10:08,197 INFO sqlalchemy.engine.Engine SELECT emission_transactions.scope, sum(emission_transactions.co2e_tonnes) AS total 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR GROUP BY emission_transactions.scope
+decarb_api  | 2025-12-12 11:10:08,198 INFO sqlalchemy.engine.Engine [cached since 0.7914s ago] ('org-cb7595b3',)
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR GROUP BY emission_transactions.scope
+decarb_api  | INFO:sqlalchemy.engine.Engine:[cached since 0.7914s ago] ('org-cb7595b3',)
+decarb_api  | 2025-12-12 11:10:08,202 INFO sqlalchemy.engine.Engine SELECT EXTRACT(year FROM emission_transactions.transaction_date) AS year, EXTRACT(month FROM emission_transactions.transaction_date) AS month, sum(emission_transactions.co2e_tonnes) AS total 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR AND emission_transactions.transaction_date >= $2::TIMESTAMP WITH TIME ZONE AND emission_transactions.transaction_date <= $3::TIMESTAMP WITH TIME ZONE GROUP BY year, month ORDER BY year, month
+decarb_api  | 2025-12-12 11:10:08,202 INFO sqlalchemy.engine.Engine [cached since 0.7903s ago] ('org-cb7595b3', datetime.datetime(2024, 12, 17, 11, 10, 8, 201327, tzinfo=datetime.timezone.utc), datetime.datetime(2025, 12, 12, 11, 10, 8, 201327, tzinfo=datetime.timezone.utc))
+decarb_api  | INFO:sqlalchemy.engine.Engine:SELECT EXTRACT(year FROM emission_transactions.transaction_date) AS year, EXTRACT(month FROM emission_transactions.transaction_date) AS month, sum(emission_transactions.co2e_tonnes) AS total 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR AND emission_transactions.transaction_date >= $2::TIMESTAMP WITH TIME ZONE AND emission_transactions.transaction_date <= $3::TIMESTAMP WITH TIME ZONE GROUP BY year, month ORDER BY year, month
+decarb_api  | INFO:sqlalchemy.engine.Engine:[cached since 0.7903s ago] ('org-cb7595b3', datetime.datetime(2024, 12, 17, 11, 10, 8, 201327, tzinfo=datetime.timezone.utc), datetime.datetime(2025, 12, 12, 11, 10, 8, 201327, tzinfo=datetime.timezone.utc))
+decarb_api  | 2025-12-12 11:10:08,206 INFO sqlalchemy.engine.Engine SELECT emission_transactions.category, sum(emission_transactions.co2e_tonnes) AS total, count(emission_transactions.id) AS count 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR GROUP BY emission_transactions.category ORDER BY sum(emission_transactions.co2e_tonnes) DESC 
+decarb_api  |  LIMIT $2::INTEGER
+decarb_api  | 2025-12-12 11:10:08,206 INFO sqlalchemy.engine.Engine [cached since 0.7848s ago] ('org-cb7595b3', 10)
+decarb_api  | INFO:sqlalchemy.engine.Engine:SELECT emission_transactions.category, sum(emission_transactions.co2e_tonnes) AS total, count(emission_transactions.id) AS count 
+decarb_api  | FROM emission_transactions 
+decarb_api  | WHERE emission_transactions.organization_id = $1::VARCHAR GROUP BY emission_transactions.category ORDER BY sum(emission_transactions.co2e_tonnes) DESC 
+decarb_api  |  LIMIT $2::INTEGER
+decarb_api  | INFO:sqlalchemy.engine.Engine:[cached since 0.7848s ago] ('org-cb7595b3', 10)
+decarb_api  | INFO:app.services.report_service:Generated PDF report: 2284 bytes
+decarb_api  | INFO:sqlalchemy.engine.Engine:ROLLBACK
+decarb_api  | 2025-12-12 11:10:08,215 INFO sqlalchemy.engine.Engine ROLLBACK
+decarb_api  | INFO:     172.18.0.1:49794 - "GET /api/v1/reports/pdf HTTP/1.1" 200 OK
+decarb_api  | INFO:     172.18.0.1:49802 - "GET /health HTTP/1.1" 200 OK
+decarb_api  | INFO:     172.18.0.1:49812 - "GET /health/ready HTTP/1.1" 200 OK
+decarb_api  | INFO:     127.0.0.1:45516 - "GET /health HTTP/1.1" 200 OK

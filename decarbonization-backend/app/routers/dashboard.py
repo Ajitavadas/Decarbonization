@@ -3,8 +3,9 @@ Dashboard Router - US-2.3
 Provides carbon dashboard data
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -20,7 +21,7 @@ router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
 @router.get("", response_model=DashboardResponse)
 async def get_dashboard(
     db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     scope_filter: Optional[int] = Query(None, ge=1, le=3)
@@ -35,15 +36,7 @@ async def get_dashboard(
     - Dashboard loads in under 2 seconds
     - Mobile view is readable and functional
     """
-    # Get user's organization
-    user_result = await db.execute(
-        select(User).where(User.id == current_user)
-    )
-    user = user_result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    org_id = user.organization_id
+    org_id = current_user.organization_id
     
     # Get total emissions
     total_emissions = await DashboardService.get_total_emissions(

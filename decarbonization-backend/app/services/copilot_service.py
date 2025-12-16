@@ -35,7 +35,7 @@ class CopilotService:
         # Define tools using correct SDK format
         # Tools will be converted internally by the SDK
         self.model = genai.GenerativeModel(
-            'gemini-1.5-flash'
+            'gemini-2.5-flash'
         )
         self.chat_sessions = {}  # Store conversation history
     

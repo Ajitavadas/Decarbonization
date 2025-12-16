@@ -9,8 +9,9 @@ from app.schemas.schemas import UserRegister, UserResponse, TokenResponse
 from app.utils import get_password_hash
 from app.auth.jwt_handler import create_access_token
 from app.auth.services import authenticate_user, get_or_create_organization
+from app.auth.oauth2_scheme import get_current_user
 
-router = APIRouter(prefix="/auth", tags=["authentication"])
+router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(user_data: UserRegister, db: AsyncSession = Depends(get_db)):
@@ -81,12 +82,7 @@ async def login_for_access_token(
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user(
-    current_user: User = Depends(lambda: None)  # We'll implement proper dependency later
+    current_user: User = Depends(get_current_user)
 ):
     """Get the current authenticated user's profile"""
-    # For now, return a simple endpoint that confirms authentication works
-    # Full implementation would use get_current_user dependency
-    raise HTTPException(
-        status_code=501,
-        detail="Endpoint not fully implemented - use token response for user data"
-    )
+    return current_user
