@@ -1,92 +1,68 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { ArrowRight, FileQuestion, Zap } from "lucide-react"
-import { cn } from "@/lib/utils"
-
-const gaps = [
-  {
-    id: 1,
-    type: "missing",
-    severity: "high",
-    title: "Missing Heating Data",
-    facility: "NYC Headquarters",
-    description: "Scope 1 natural gas consumption data missing for Oct-Dec 2024",
-    icon: FileQuestion,
-  },
-  {
-    id: 2,
-    type: "anomaly",
-    severity: "medium",
-    title: "Electricity Spike Detected",
-    facility: "LA Distribution Center",
-    description: "2.3σ deviation from baseline - 40% increase in consumption",
-    icon: Zap,
-  },
-  {
-    id: 3,
-    type: "missing",
-    severity: "low",
-    title: "Incomplete Travel Records",
-    facility: "Global",
-    description: "Business travel data partially missing for Q4 2024",
-    icon: FileQuestion,
-  },
-]
+import { AlertCircle, Calendar, MapPin } from "lucide-react"
+import { fetchGaps } from "@/lib/api"
 
 export function DataGaps() {
+  const [gaps, setGaps] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await fetchGaps()
+        setGaps(data)
+      } catch (err) {
+        console.error("Failed to load gaps:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [])
+
   return (
     <Card className="border-border bg-card">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CardTitle className="text-base font-medium">Data Gaps & Anomalies</CardTitle>
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-xs font-medium text-destructive-foreground">
-              {gaps.length}
-            </span>
-          </div>
-          <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground">
-            View all
-            <ArrowRight className="ml-1 h-3 w-3" />
-          </Button>
-        </div>
+      <CardHeader>
+        <CardTitle className="text-base font-medium">Data Quality Gaps</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
-        {gaps.map((gap) => (
-          <div
-            key={gap.id}
-            className="group flex items-start gap-3 rounded-lg border border-border bg-secondary/50 p-3 transition-colors hover:bg-secondary"
-          >
-            <div
-              className={cn(
-                "mt-0.5 rounded-md p-1.5",
-                gap.severity === "high" && "bg-destructive/10 text-destructive",
-                gap.severity === "medium" && "bg-warning/10 text-warning",
-                gap.severity === "low" && "bg-muted text-muted-foreground",
-              )}
-            >
-              <gap.icon className="h-4 w-4" />
-            </div>
-            <div className="flex-1 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-foreground">{gap.title}</span>
-                <span
-                  className={cn(
-                    "rounded-full px-2 py-0.5 text-[10px] font-medium uppercase",
-                    gap.severity === "high" && "bg-destructive/10 text-destructive",
-                    gap.severity === "medium" && "bg-warning/10 text-warning",
-                    gap.severity === "low" && "bg-muted text-muted-foreground",
-                  )}
-                >
-                  {gap.severity}
-                </span>
+      <CardContent>
+        <div className="space-y-4">
+          {loading ? (
+            <p className="text-sm text-muted-foreground">Analyzing data for gaps...</p>
+          ) : gaps.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <div className="rounded-full bg-emerald-500/10 p-3">
+                <AlertCircle className="h-6 w-6 text-emerald-500" />
               </div>
-              <p className="text-xs text-muted-foreground">{gap.facility}</p>
-              <p className="text-xs text-muted-foreground">{gap.description}</p>
+              <h3 className="mt-2 text-sm font-medium">No gaps detected</h3>
+              <p className="max-w-[150px] text-xs text-muted-foreground">Your data coverage looks complete for the past year.</p>
             </div>
-          </div>
-        ))}
+          ) : (
+            gaps.map((gap, index) => (
+              <div key={index} className="flex items-start gap-3 rounded-lg border border-border bg-secondary/30 p-3">
+                <AlertCircle className={`mt-0.5 h-4 w-4 ${gap.severity === 'high' ? 'text-destructive' : 'text-amber-500'}`} />
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-foreground">{gap.description}</p>
+                  <div className="flex flex-wrap gap-2 text-[10px] text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      {(gap.details?.missing_months || []).join(", ")}
+                    </span>
+                    {gap.details?.category && (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        {gap.details.category}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </CardContent>
     </Card>
   )

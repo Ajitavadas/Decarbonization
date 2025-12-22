@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { X, Send, Sparkles, AlertCircle, Loader2, Bot, User, Lightbulb, FileQuestion } from "lucide-react"
 
+import { sendCopilotQuery } from "@/lib/api"
+
 interface Message {
   id: string
   role: "user" | "assistant" | "system"
@@ -27,14 +29,6 @@ const initialMessages: Message[] = [
     content:
       "Hello! I'm your Carbon Copilot. I'm constantly monitoring your emissions data and will ping you when I detect gaps or anomalies that need attention.",
     timestamp: new Date(Date.now() - 60000),
-  },
-  {
-    id: "2",
-    role: "system",
-    type: "ping",
-    content:
-      "I noticed missing Scope 1 data for NYC HQ. Can you provide the natural gas consumption for Q4 2024? I can estimate it using industry benchmarks if you'd like.",
-    timestamp: new Date(Date.now() - 30000),
   },
 ]
 
@@ -70,24 +64,29 @@ export function CarbonCopilot({ open, onClose }: CarbonCopilotProps) {
     setInput("")
     setIsTyping(true)
 
-    // Simulate AI response
-    setTimeout(() => {
-      const responses = [
-        "Based on your facility type and location, I estimate your Q4 heating emissions to be approximately 280 tCO₂e. This is calculated using EPA emission factors for natural gas in commercial buildings. Would you like me to apply this estimate?",
-        "I've analyzed your emissions data. Your Scope 2 emissions are primarily driven by your LA Distribution Center, which accounts for 35% of total electricity consumption. I recommend exploring renewable energy certificates (RECs) for this facility.",
-        "Your total emissions have decreased by 8.2% compared to last year. The main contributors to this reduction were energy efficiency improvements at your NYC HQ and the transition to LED lighting across all facilities.",
-      ]
+    try {
+      const response = await sendCopilotQuery(input)
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: responses[Math.floor(Math.random() * responses.length)],
+        content: response.answer,
         timestamp: new Date(),
       }
 
       setMessages((prev) => [...prev, assistantMessage])
+    } catch (err) {
+      console.error("Copilot error:", err)
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "I'm sorry, I'm having trouble connecting to my brain right now. Please try again later.",
+        timestamp: new Date(),
+      }
+      setMessages((prev) => [...prev, errorMessage])
+    } finally {
       setIsTyping(false)
-    }, 1500)
+    }
   }
 
   const handleQuickAction = (action: string) => {

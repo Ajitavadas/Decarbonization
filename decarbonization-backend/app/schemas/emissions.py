@@ -32,6 +32,7 @@ class StandardizedEmissionEvent(BaseModel):
     activity_type: Literal["electricity", "natural_gas", "diesel", "refrigerant", "purchased_goods"]
     activity_value: float
     activity_unit: Literal["kWh", "MWh", "therms", "liters", "gallons", "kg", "tonnes"]
+    activity_id: Optional[str] = None # Added for Climatiq matching
     emission_factor: Optional[float] = None
     
     location: LocationData

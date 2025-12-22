@@ -16,7 +16,7 @@ import redis.asyncio as redis
 
 from app.database import get_db, async_session as app_async_session
 from app.auth.oauth2_scheme import get_current_user
-from app.models.models import User, EmissionTransaction, AuditLog
+from app.models.models import User, EmissionEvent, CalculationLedger, AuditTrail
 from app.services.csv_service import CSVParsingService
 from app.services.import_service import ImportService
 from app.services.location_service import LocationService
@@ -169,8 +169,9 @@ async def process_import(
             # Use return_exceptions=True to continue even if one fails
             refined_results = await asyncio.gather(*tasks, return_exceptions=True)
             
-            # 4. Construct Transactions
-            transactions = []
+            # 4. Construct Events and Calculations
+            events_to_save = []
+            ledgers_to_save = []
             valid_refined_count = 0
             
             for i, result in enumerate(refined_results):
@@ -181,88 +182,94 @@ async def process_import(
                     errors.append({"row": row_num, "error": f"Refinement failed: {str(result)}"})
                     continue
                 
-                if not result: # Returned None
+                if not result:
                     errors.append({"row": row_num, "error": "AI could not refine row"})
                     continue
                     
                 valid_refined_count += 1
-                event: StandardizedEmissionEvent = result
-                
-                # Convert to DB Model (EmissionTransaction)
-                # Map StandardizedEmissionEvent -> EmissionTransaction
-                
-                # INTEGRATION: Geographer & Analyst
+                event_schema: StandardizedEmissionEvent = result
                 
                 # 1. Geographer: Find Region
-                if event.location.latitude and event.location.longitude:
+                grid_region_id = None
+                if event_schema.location.latitude and event_schema.location.longitude:
                     try:
                         region = await LocationService.get_region_by_coordinates(
-                            db, event.location.latitude, event.location.longitude
+                            db, event_schema.location.latitude, event_schema.location.longitude
                         )
                         if region:
-                            event.location.grid_region_id = region.code
-                            logger.info(f"Row {row_num}: Found Grid Region {region.code}")
+                            grid_region_id = region.code
                     except Exception as loc_err:
                         logger.warning(f"Row {row_num}: Location lookup failed: {loc_err}")
 
                 # 2. Analyst: Calculate Emissions
                 try:
-                    calc_result = await CalculationService.calculate_emissions(event)
-                    co2e_kg = calc_result.location_based_co2e_kg
-                    co2e_tonnes = co2e_kg / 1000.0
-                    
-                    # Log audit info if needed, or store in transaction
-                    # We might want to store market_based too if the model supports it
+                    calc_result = await CalculationService.calculate_emissions(db, event_schema)
                 except Exception as calc_err:
                     logger.error(f"Row {row_num}: Calculation failed: {calc_err}")
                     errors.append({"row": row_num, "error": f"Calculation failed: {calc_err}"})
                     continue
 
+                # 3. Create Models
                 try:
-                    transactions.append(EmissionTransaction(
+                    # EmissionEvent (Phase 1)
+                    new_event = EmissionEvent(
                         organization_id=org_id,
-                        description=original_row.get('description', '') or f"{event.activity_type} usage", 
-                        transaction_date=event.timestamp,
-                        scope=int(original_row.get('scope', 0)) if original_row.get('scope') else 0, 
-                        category=event.activity_type,
-                        activity_value=event.activity_value,
-                        activity_unit=event.activity_unit,
+                        activity_date=event_schema.timestamp,
+                        activity_value=event_schema.activity_value,
+                        activity_unit_raw=original_row.get('unit', event_schema.activity_unit),
+                        activity_unit_normalized=event_schema.activity_unit,
+                        activity_value_normalized=event_schema.activity_value,
+                        source_type="csv_import",
+                        scope=event_schema.activity_type, # Placeholder for scope if not classified yet
+                        activity_id_matched=event_schema.activity_id,
+                        confidence_score=event_schema.data_quality.confidence_score
+                    )
+                    
+                    # CalculationLedger (Phase 2)
+                    new_ledger = CalculationLedger(
+                        organization_id=org_id,
+                        batch_id=import_id,
+                        emission_event=new_event,
+                        activity_value=event_schema.activity_value,
+                        activity_unit_normalized=event_schema.activity_unit,
+                        emission_factor_id=uuid.UUID(calc_result.factor_used.get('id')) if calc_result.factor_used.get('id') else None,
                         emission_factor_value=calc_result.factor_used.get('value', 0.0),
-                        co2e_kg=co2e_kg,
-                        co2e_tonnes=co2e_tonnes,
-                        ai_scope_prediction=None,
-                        ai_confidence_score=event.data_quality.confidence_score,
-                        ai_needs_review=event.data_quality.confidence_score < 0.8,
-                        supplier_name=original_row.get('supplier_name'),
-                        project_id=original_row.get('project_id'),
-                        notes=original_row.get('notes'),
-                        created_by_user_id=user_id
-                    ))
+                        result_kg_co2e=calc_result.location_based_co2e_kg,
+                        result_kg_total=calc_result.location_based_co2e_kg,
+                        fell_back_to_climatiq=calc_result.calculation_method == 'climatiq',
+                        calculated_by_user_id=user_id
+                    )
+                    
+                    events_to_save.append(new_event)
+                    ledgers_to_save.append(new_ledger)
                 except Exception as e:
-                    errors.append({"row": row_num, "error": f"Transaction mapping failed: {e}"})
+                    errors.append({"row": row_num, "error": f"Model mapping failed: {e}"})
 
-            logger.info(f"Refinement complete. Valid rows: {valid_refined_count}/{len(rows)}")
+            # 5. AI Classification (Scope) - Integrate the new classifier
+            if events_to_save:
+                try:
+                    from app.services.ai_classifier_service import ai_classifier
+                    # Prepare rows for classifier from event schemas
+                    rows_to_classify = [
+                        {
+                            "description": rows[i].get('description', ''),
+                            "category": events_to_save[i].scope, # initial activity_type
+                            "unit": events_to_save[i].activity_unit_normalized,
+                            "value": float(events_to_save[i].activity_value)
+                        }
+                        for i in range(len(events_to_save))
+                    ]
+                    classifications = await ai_classifier.classify_batch(rows_to_classify)
+                    for i, cls in enumerate(classifications):
+                        events_to_save[i].scope = cls.get('scope', 'Scope 3')
+                        events_to_save[i].scope_3_category = cls.get('scope3Category')
+                except Exception as ai_err:
+                    logger.error(f"AI Classification failed: {ai_err}")
 
-            # 5. AI Classification (Scope) - Optional: Run classification on refined data?
-            # Existing logic runs on 'valid_rows' (dicts). 
-            # We now have 'transactions' (DB objects).
-            # The existing `classify_and_enhance_rows` expects Dicts.
-            # We can skip this or adapt it. 
-            # For Phase 1.2, let's rely on Refiner.
-            # But we might miss Scope if it wasn't in input.
-            # Let's perform Scope Classification on the TRANSACTIONS before inserting.
-            
-            # ... (skip legacy validation block as we did refined validation) ...
-            
-            # 6. Deduplicate (using transactions list?)
-            # ImportService.check_duplicates expects dicts?
-            # Let's simple skip dup check for now or adapt.
-            # We will proceed to insert.
-            
-            # Insert
+            # 6. Insert
             successful = 0
-            if transactions:
-                successful, batch_errors = await ImportService.bulk_insert_transactions(db, transactions)
+            if events_to_save:
+                successful, batch_errors = await ImportService.bulk_insert_import(db, events_to_save, ledgers_to_save)
                 errors.extend([{"row": f"batch-{i}", "error": err} for i, err in enumerate(batch_errors)])
             
             # Audit

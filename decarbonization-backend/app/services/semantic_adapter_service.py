@@ -9,9 +9,11 @@ import json
 import google.generativeai as genai
 from app.config import settings
 
+from app.services.ai_base_service import AIBaseService
+
 logger = logging.getLogger(__name__)
 
-class SemanticAdapterService:
+class SemanticAdapterService(AIBaseService):
     """
     Universal Semantic Adapter
     Maps arbitrary CSV headers to internal schema fields using AI.
@@ -32,8 +34,7 @@ class SemanticAdapterService:
     }
 
     def __init__(self):
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        self.model = genai.GenerativeModel('gemini-2.5-flash')
+        super().__init__()
         
     async def map_headers(self, headers: List[str]) -> Dict[str, str]:
         """
@@ -44,13 +45,9 @@ class SemanticAdapterService:
         prompt = self._build_mapping_prompt(headers)
         
         try:
-            import asyncio
-            # Add 10-second timeout for AI
-            response = await asyncio.wait_for(
-                self.model.generate_content_async(prompt),
-                timeout=10.0
-            )
-            mapping = self._parse_mapping_response(response.text)
+            # Use call_ai with Gemini as preferred, but fallback to Groq if needed
+            response_text = await self.call_ai(prompt, json_mode=True, preferred_provider="gemini")
+            mapping = self._parse_mapping_response(response_text)
             
             # Validate mapping
             logger.info(f"AI mapped headers: {mapping}")
@@ -163,12 +160,8 @@ class SemanticAdapterService:
         prompt = self._build_row_normalization_prompt(raw_row)
         
         try:
-            import asyncio
-            response = await asyncio.wait_for(
-                self.model.generate_content_async(prompt),
-                timeout=10.0
-            )
-            data = self._parse_mapping_response(response.text)
+            response_text = await self.call_ai(prompt, json_mode=True, preferred_provider="gemini")
+            data = self._parse_mapping_response(response_text)
             
             # Construct object
             # LLM returns dict with: activity_type, activity_value, activity_unit, timestamp_str

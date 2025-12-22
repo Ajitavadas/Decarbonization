@@ -257,40 +257,49 @@ class CSVParsingService:
         rows: List[Dict]
     ) -> Tuple[List[Dict], List[Dict]]:
         """
-        Enhance rows with AI scope classification
+        Enhance rows with AI scope classification (Batch optimized)
         
         Returns:
             (enhanced_rows, ai_errors)
         """
-        enhanced_rows = []
-        ai_errors = []
-        
-        for row in rows:
-            try:
-                # Call AI classifier
-                scope, confidence, needs_review = await ai_classifier.classify_transaction(
-                    description=row.get('description', ''),
-                    category=row.get('category', ''),
-                    supplier_name=row.get('supplier_name')
-                )
+        if not rows:
+            return [], []
+
+        try:
+            # Call AI classifier in batch
+            batch_results = await ai_classifier.classify_batch(rows)
+            
+            enhanced_rows = []
+            for i, row in enumerate(rows):
+                # Match result from batch (by index or ID)
+                # Our classify_batch returns results in same order relative to inputs
+                res = batch_results[i] if i < len(batch_results) else {}
                 
                 # Update row with AI predictions
-                row['ai_scope_prediction'] = scope
-                row['ai_confidence_score'] = confidence
-                row['ai_needs_review'] = needs_review
+                scope_str = res.get("scope", "Scope 3")
+                # Extract integer from "Scope X"
+                try:
+                    scope_val = int(scope_str.split(" ")[1]) if isinstance(scope_str, str) and " " in scope_str else 3
+                except (ValueError, IndexError):
+                    scope_val = 3
+                
+                row['ai_scope_prediction'] = scope_val
+                row['ai_confidence_score'] = res.get("confidence", 0.0)
+                row['ai_needs_review'] = res.get("needs_review", True)
+                row['scope3_category'] = res.get("scope3Category")
+                row['ai_reasoning'] = res.get("reasoning")
                 
                 enhanced_rows.append(row)
                 
-            except Exception as e:
-                ai_errors.append({
-                    "row": row.get('_row_num', '?'),
-                    "error": f"AI classification failed: {str(e)}"
-                })
-                # Set defaults on failure
+            return enhanced_rows, []
+                
+        except Exception as e:
+            logger.error(f"Batch AI classification failed: {str(e)}")
+            # Fallback for all rows
+            for row in rows:
                 row['ai_scope_prediction'] = None
                 row['ai_confidence_score'] = 0.0
                 row['ai_needs_review'] = True
-                enhanced_rows.append(row)
-        
-        return enhanced_rows, ai_errors
+            
+            return rows, [{"row": "batch", "error": f"AI classification failed: {str(e)}"}]
     

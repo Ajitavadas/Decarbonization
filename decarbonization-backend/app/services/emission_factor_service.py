@@ -369,3 +369,32 @@ class EmissionFactorService:
             select(EmissionFactor).where(EmissionFactor.id == factor_id)
         )
         return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_latest_factor_by_activity_id(
+        db: AsyncSession, 
+        activity_id: str,
+        region: Optional[str] = None,
+        year: Optional[int] = None
+    ) -> Optional[EmissionFactor]:
+        """
+        Get the most recent local emission factor by activity_id (US-2.1)
+        Favors the specific year and region if provided.
+        """
+        query = select(EmissionFactor).where(
+            and_(
+                EmissionFactor.activity_id == activity_id,
+                EmissionFactor.is_active == True
+            )
+        )
+        
+        if region:
+            query = query.where(EmissionFactor.region == region)
+        if year:
+            query = query.where(EmissionFactor.year == year)
+            
+        # Order by year descending to get latest
+        query = query.order_by(EmissionFactor.year.desc())
+        
+        result = await db.execute(query)
+        return result.scalars().first()

@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     
     # Gemini AI Configuration
     GEMINI_API_KEY: str = "Gemini API Key"
+    GROQ_API_KEY: str = ""
+    CLIMATIQ_API_KEY: str = ""
     AI_MIN_CONFIDENCE_THRESHOLD: float = 0.80 # 80% confidence threshold for AI responses
     
     # Security

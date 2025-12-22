@@ -3,12 +3,13 @@ from sqlalchemy.orm import relationship
 from app.models.models import Base
 import uuid
 from datetime import datetime, timezone
+from sqlalchemy.dialects.postgresql import UUID
 
 class AgentState(Base):
     __tablename__ = "agent_states"
 
     thread_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     state = Column(JSON, nullable=True)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
     current_node = Column(String(255), nullable=True)

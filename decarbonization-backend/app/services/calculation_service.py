@@ -195,57 +195,130 @@ class CalculationService:
         return value_base / factor_to
 
     @staticmethod
-    async def calculate_emissions(event: "StandardizedEmissionEvent") -> "EmissionResult":
+    async def calculate_emissions(
+        db: AsyncSession, 
+        event: "StandardizedEmissionEvent"
+    ) -> "EmissionResult":
         """
         Calculate emissions for a standardized event (US-3.1)
-        
-        Logic:
-        1. Determine Factor (Mocked for now - always 0.5 kgCO2e/kWh for electricity)
-        2. Convert Activity to Factor Unit
-        3. Calculate Location-Based
-        4. Calculate Market-Based (Dual Reporting)
+        Hybrid Logic: Use latest data (Local vs Climatiq)
         """
         from app.schemas.emissions import EmissionResult
+        from app.services.emission_factor_service import EmissionFactorService
+        from app.services.climatiq_service import ClimatiqService, ClimatiqEstimateRequest, ClimatiqEmissionFactor
         
-        # 1. MOCK: Get Factor
-        # Real logic would use EmissionFactorService.match(event)
-        # For now, hardcoded mock
-        mock_factor = {
-            "value": 0.5, # kgCO2e / kWh (mock)
-            "unit": "kg",
-            "denominator": "kwh",
-            "name": "Mock Grid Average",
-            "source": "Mock DB"
-        }
+        climatiq_svc = ClimatiqService()
         
-        # 2. Convert Activity
-        # Target unit is the factor's denominator
+        # 1. Look for local factor
+        local_factor = None
+        if event.activity_id:
+            local_factor = await EmissionFactorService.get_latest_factor_by_activity_id(
+                db, event.activity_id
+            )
+            
+        # 2. Check Climatiq for updates (simplification: always check metadata if activity_id exists)
+        # In a real system, we might cache this or check periodically.
+        climatiq_metadata = None
+        use_climatiq = False
+        
+        if event.activity_id:
+            try:
+                climatiq_metadata = await climatiq_svc.get_activity_id_metadata(event.activity_id)
+                if climatiq_metadata:
+                    # Logic: use Climatiq if local factor is missing or if Climatiq has a newer year/version
+                    if not local_factor:
+                        use_climatiq = True
+                    else:
+                        # Compare years (master logic: latest year wins)
+                        climatiq_year = climatiq_metadata.get("year", 0)
+                        local_year = local_factor.year or 0
+                        if climatiq_year > local_year:
+                           use_climatiq = True
+                        elif climatiq_year == local_year:
+                            # If years are same, check data_version if available
+                            climatiq_ver = climatiq_metadata.get("data_version", "")
+                            local_ver = local_factor.data_version or ""
+                            if climatiq_ver > local_ver:
+                                use_climatiq = True
+            except Exception as e:
+                logger.warning(f"Failed to check Climatiq metadata for {event.activity_id}: {str(e)}")
+
+        # 3. Perform calculation
+        if use_climatiq and climatiq_metadata:
+            # Perform calculation using Climatiq API
+            try:
+                param_name = CalculationService._get_climatiq_param_name(event.activity_type)
+                estimate_req = ClimatiqEstimateRequest(
+                    emission_factor=ClimatiqEmissionFactor(
+                        activity_id=event.activity_id,
+                        id=climatiq_metadata.get("id")
+                    ),
+                    parameters={
+                        param_name: event.activity_value,
+                        f"{param_name}_unit": event.activity_unit.lower()
+                    }
+                )
+                climatiq_resp = await climatiq_svc.estimate(estimate_req)
+                
+                return EmissionResult(
+                    location_based_co2e_kg=climatiq_resp.co2e,
+                    market_based_co2e_kg=climatiq_resp.co2e, # Default fallback
+                    factor_used={
+                        "activity_id": event.activity_id,
+                        "climatiq_id": climatiq_metadata.get("id"),
+                        "source": climatiq_resp.emission_factor.get("source"),
+                        "year": climatiq_metadata.get("year")
+                    },
+                    calculation_method="climatiq_api_latest"
+                )
+            except Exception as e:
+                logger.error(f"Climatiq calculation failed: {str(e)}")
+                # If Climatiq fails, try to fall back to local if available
+                if not local_factor:
+                    raise
+
+        # 4. Fallback/Default to local calculation
+        if not local_factor:
+            # Mock factor if none found (as in original code)
+            factor_val = 0.5
+            factor_info = {"name": "Mock Grid Average", "source": "Mock DB", "denominator": "kwh"}
+        else:
+            factor_val = local_factor.factor_value
+            factor_info = {
+                "name": local_factor.name, 
+                "source": local_factor.source,
+                "denominator": local_factor.factor_unit.split("/")[-1].lower() if "/" in local_factor.factor_unit else "kwh"
+            }
+
+        # Original calculation logic
         try:
            converted_activity = CalculationService.convert_to_base_unit(
                event.activity_value, 
                event.activity_unit, 
-               mock_factor["denominator"]
+               factor_info["denominator"]
            )
         except ValueError:
-            # Fallback if conversion fails (e.g. unknown unit), just treat as 1:1 for MVP if compatible
-            # Or raise error. Let's log and re-raise for robustness
-            logger.warning(f"Unit conversion failed for {event.activity_unit} -> {mock_factor['denominator']}")
+            logger.warning(f"Unit conversion failed for {event.activity_unit} -> {factor_info['denominator']}")
             raise
 
-        # 3. Location-Based Calculation
-        location_co2e_kg = converted_activity * mock_factor["value"]
-        
-        # 4. Market-Based Calculation
-        # Rule: If market instruments (RECs) exist, market_based = 0 (assuming 100% matched for MVP logic)
-        # Otherwise, falls back to location-based (Grid Mix)
-        if event.market_instruments:
-             market_co2e_kg = 0.0
-        else:
-             market_co2e_kg = location_co2e_kg
+        location_co2e_kg = converted_activity * factor_val
+        market_co2e_kg = 0.0 if event.market_instruments else location_co2e_kg
 
         return EmissionResult(
             location_based_co2e_kg=round(location_co2e_kg, 4),
             market_based_co2e_kg=round(market_co2e_kg, 4),
-            factor_used=mock_factor,
-            calculation_method="standard_factor_mock"
+            factor_used=factor_info,
+            calculation_method="local_db_latest" if local_factor else "standard_factor_mock"
         )
+
+    @staticmethod
+    def _get_climatiq_param_name(activity_type: str) -> str:
+        """Map internal activity types to Climatiq parameter names"""
+        mapping = {
+            "electricity": "energy",
+            "natural_gas": "energy",
+            "diesel": "volume",
+            "purchased_goods": "money",
+            "refrigerant": "weight"
+        }
+        return mapping.get(activity_type, "energy")

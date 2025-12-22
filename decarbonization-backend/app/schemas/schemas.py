@@ -6,9 +6,10 @@ Pydantic schemas for request/response validation
 - Emission factor handling
 """
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+import uuid
+from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 
 
 # ==================== User Schemas ====================
@@ -44,16 +45,15 @@ class UserLogin(BaseModel):
 
 
 class UserResponse(BaseModel):
-    """Schema for user response"""
-    id: str
+    """Schema for user response aligned with new model"""
+    id: uuid.UUID
     email: str
-    username: str
-    full_name: Optional[str]
+    first_name: Optional[str]
+    last_name: Optional[str]
     is_active: bool
-    is_admin: bool
-    organization_id: str
+    role: str
+    organization_id: uuid.UUID
     created_at: datetime
-    last_login: Optional[datetime]
     
     class Config:
         from_attributes = True
@@ -113,24 +113,50 @@ class EmissionTransactionUpdate(BaseModel):
     notes: Optional[str] = None
 
 
-class EmissionTransactionResponse(BaseModel):
-    """Schema for emission transaction response"""
+class EmissionEventResponse(BaseModel):
     id: str
     organization_id: str
-    description: str
-    transaction_date: datetime
-    scope: int
-    category: str
+    activity_date: datetime
     activity_value: float
-    activity_unit: str
-    co2e_kg: float
-    co2e_tonnes: float
-    ai_scope_prediction: Optional[int]
-    ai_confidence_score: Optional[float]
-    ai_needs_review: bool
-    supplier_name: Optional[str]
+    activity_unit_raw: Optional[str]
+    activity_unit_normalized: str
+    activity_value_normalized: float
+    source_type: str
+    scope: str
+    scope_3_category: Optional[str]
+    confidence_score: Optional[float]
     created_at: datetime
-    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class CalculationLedgerResponse(BaseModel):
+    id: str
+    organization_id: str
+    emission_event_id: str
+    calculation_timestamp: datetime
+    activity_value: float
+    activity_unit_normalized: str
+    emission_factor_value: float
+    result_kg_co2e: float
+    result_kg_total: float
+    fell_back_to_climatiq: bool
+    calculated_by_user_id: Optional[str]
+    
+    class Config:
+        from_attributes = True
+
+class EmissionTransactionResponse(BaseModel):
+    """Combined schema for dashboard/list views (Legacy name, new structure)"""
+    id: str
+    event_id: str
+    description: Optional[str]
+    date: datetime
+    scope: str
+    category: Optional[str]
+    amount: float
+    unit: str
+    co2e_tonnes: float
     
     class Config:
         from_attributes = True
@@ -165,6 +191,10 @@ class EmissionFactorResponse(BaseModel):
     factor_unit: str
     region: Optional[str]
     country: Optional[str]
+    activity_id: Optional[str]
+    climatiq_id: Optional[str]
+    data_version: Optional[str]
+    year: Optional[int]
     is_active: bool
     effective_date: datetime
     created_at: datetime
@@ -318,7 +348,7 @@ class EmissionReviewResponse(BaseModel):
 class DashboardResponse(BaseModel):
     """Schema for dashboard data (US-2.3)"""
     total_emissions_tonnes: float
-    scope_breakdown: Dict[int, float]
+    scope_breakdown: Dict[str, float]
     monthly_trend: List[Dict]
     category_breakdown: List[Dict]
     period: Dict[str, Optional[str]]

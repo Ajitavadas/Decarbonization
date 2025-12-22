@@ -26,34 +26,21 @@ async def get_dashboard(
     end_date: Optional[datetime] = None,
     scope_filter: Optional[int] = Query(None, ge=1, le=3)
 ):
-    """
-    Get dashboard data (US-2.3)
-    
-    AC:
-    - Dashboard shows total emissions prominently
-    - Pie chart accurately represents Scope breakdown
-    - 12-month trend is visible and accurate
-    - Dashboard loads in under 2 seconds
-    - Mobile view is readable and functional
-    """
+    """Get dashboard summary data"""
     org_id = current_user.organization_id
     
-    # Get total emissions
     total_emissions = await DashboardService.get_total_emissions(
         db, org_id, start_date, end_date
     )
     
-    # Get scope breakdown
     scope_breakdown = await DashboardService.get_scope_breakdown(
         db, org_id, start_date, end_date
     )
     
-    # Get monthly trend
     monthly_trend = await DashboardService.get_monthly_trend(
         db, org_id, months=12
     )
     
-    # Get category breakdown
     category_breakdown = await DashboardService.get_category_breakdown(
         db, org_id, scope=scope_filter, limit=10
     )
@@ -68,3 +55,21 @@ async def get_dashboard(
             "end_date": end_date.isoformat() if end_date else None
         }
     }
+
+@router.get("/activity")
+async def get_activity(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    limit: int = 10
+):
+    """Get recent activity feed"""
+    return await DashboardService.get_recent_activity(db, current_user.organization_id, limit=limit)
+
+@router.get("/gaps")
+async def get_gaps(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get identified data gaps"""
+    from app.services.gap_service import GapService
+    return await GapService.detect_gaps(db, current_user.organization_id)

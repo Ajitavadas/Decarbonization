@@ -6,6 +6,7 @@ Database configuration and session management
 - Database initialization utilities
 """
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
 import os
@@ -49,6 +50,9 @@ async def init_db():
     Call this once at startup to create all tables
     """
     async with engine.begin() as conn:
+        # Enable PostGIS extension
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
+        
         # Import models to register them with Base
         from app.models.models import Base
         import app.models.agents  # Register AgentState

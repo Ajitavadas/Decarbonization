@@ -1,13 +1,5 @@
-# app/models/models.py
-"""
-SQLAlchemy ORM models for the Decarbonization Platform
-- User: Authentication and user management
-- EmissionTransaction: Carbon emission records
-- EmissionFactor: Standard emission conversion factors
-- AuditLog: Audit trail for compliance
-"""
-
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Boolean, ForeignKey, Index, JSON
+from sqlalchemy import Column, Integer, String, Numeric, DateTime, Text, Boolean, ForeignKey, Index, JSON, DECIMAL
+from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
@@ -15,290 +7,155 @@ import uuid
 
 Base = declarative_base()
 
-
-class User(Base):
-    """User model for authentication and authorization"""
-    __tablename__ = "users"
-    
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    email = Column(String(255), unique=True, nullable=False, index=True)
-    username = Column(String(100), unique=True, nullable=False, index=True)
-    hashed_password = Column(String(255), nullable=False)
-    full_name = Column(String(255), nullable=True)
-    is_active = Column(Boolean, default=True, index=True)
-    is_admin = Column(Boolean, default=False)
-    organization_id = Column(String(36), ForeignKey("organizations.id"), nullable=False)
-    
-    # Timestamps
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
-    last_login = Column(DateTime(timezone=True), nullable=True)
-    
-    # Relationships - specify foreign_keys to avoid ambiguity
-    emission_transactions = relationship(
-        "EmissionTransaction", 
-        foreign_keys="EmissionTransaction.created_by_user_id",
-        back_populates="created_by_user"
-    )
-    verified_transactions = relationship(
-        "EmissionTransaction",
-        foreign_keys="EmissionTransaction.verified_by_user_id",
-        back_populates="verified_by_user"
-    )
-    audit_logs = relationship("AuditLog", back_populates="user")
-    organization = relationship("Organization", back_populates="users")
-    
-    # Indexes for common queries
-    __table_args__ = (
-        Index("idx_users_email_org", "email", "organization_id"),
-        Index("idx_users_is_active", "is_active"),
-    )
-
-
 class Organization(Base):
-    """Organization model for multi-tenancy support"""
+    """Organization model from schema.sql"""
     __tablename__ = "organizations"
     
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String(255), nullable=False)
-    slug = Column(String(100), unique=True, nullable=False, index=True)
-    description = Column(Text, nullable=True)
-    is_active = Column(Boolean, default=True, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_name = Column(String(255), unique=True, nullable=False)
+    industry = Column(String(10))  # NAICS code
+    countries = Column(ARRAY(Text), default=[])
+    headcount = Column(Integer)
+    annual_revenue = Column(DECIMAL(15, 2))
+    is_public_company = Column(Boolean, default=False)
+    listing_status = Column(String(50)) # public, private, subsidiary
     
-    # Timestamps
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True))
     
-    # Relationships
     users = relationship("User", back_populates="organization", cascade="all, delete-orphan")
-    emission_transactions = relationship("EmissionTransaction", back_populates="organization")
-    emission_factors = relationship("EmissionFactor", back_populates="organization")
-    audit_logs = relationship("AuditLog", back_populates="organization")
-    targets = relationship("EmissionTarget", back_populates="organization")
-    forecasts = relationship("ForecastData", back_populates="organization")
+    emission_events = relationship("EmissionEvent", back_populates="organization")
+    calculation_ledgers = relationship("CalculationLedger", back_populates="organization")
 
+class User(Base):
+    """User model from schema.sql"""
+    __tablename__ = "users"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    email = Column(String(255), unique=True, nullable=False)
+    password_hash = Column(String(512))
+    first_name = Column(String(100))
+    last_name = Column(String(100))
+    role = Column(String(50)) # admin, auditor, analyst, viewer
+    permissions = Column(JSON)
+    last_login = Column(DateTime(timezone=True))
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
-class EmissionTransaction(Base):
-    """Model for individual emission transactions"""
-    __tablename__ = "emission_transactions"
-    
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    organization_id = Column(String(36), ForeignKey("organizations.id"), nullable=False, index=True)
-    
-    # Transaction details
-    description = Column(String(500), nullable=False)
-    transaction_date = Column(DateTime(timezone=True), nullable=False, index=True)
-    
-    # Emission classification (Scope 1/2/3)
-    scope = Column(Integer, nullable=False, index=True)  # 1, 2, or 3
-    category = Column(String(100), nullable=False, index=True)  # e.g., "Fuel", "Electricity", "Business Travel"
-    
-    # Activity data
-    activity_value = Column(Float, nullable=False)
-    activity_unit = Column(String(50), nullable=False)  # e.g., "kWh", "liters", "kg"
-    
-    # Emission factor and calculation
-    emission_factor_id = Column(String(36), ForeignKey("emission_factors.id"), nullable=True)
-    emission_factor_value = Column(Float, nullable=False)  # CO2e per unit
-    
-    # Calculated emissions
-    co2e_kg = Column(Float, nullable=False, index=True)  # Total CO2e in kilograms
-    co2e_tonnes = Column(Float, nullable=False)  # Total CO2e in metric tonnes
-    
-    # AI Classification
-    ai_scope_prediction = Column(Integer, nullable=True)
-    ai_confidence_score = Column(Float, nullable=True)
-    ai_needs_review = Column(Boolean, default=False, index=True)
-    
-    # Metadata
-    supplier_name = Column(String(255), nullable=True, index=True)
-    project_id = Column(String(36), nullable=True)
-    notes = Column(Text, nullable=True)
-    
-    # Audit trail
-    created_by_user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
-    verified_by_user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
-    verified_at = Column(DateTime(timezone=True), nullable=True)
-    
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
-    
-    # Relationships - explicitly specify foreign_keys to avoid ambiguity
-    organization = relationship("Organization", back_populates="emission_transactions")
-    created_by_user = relationship(
-        "User",
-        foreign_keys=[created_by_user_id],
-        back_populates="emission_transactions"
-    )
-    verified_by_user = relationship(
-        "User",
-        foreign_keys=[verified_by_user_id],
-        back_populates="verified_transactions"
-    )
-    emission_factor = relationship("EmissionFactor", back_populates="transactions")
-    
-    # Indexes
-    __table_args__ = (
-        Index("idx_emission_org_date", "organization_id", "transaction_date"),
-        Index("idx_emission_org_scope", "organization_id", "scope"),
-        Index("idx_emission_org_category", "organization_id", "category"),
-    )
-
+    organization = relationship("Organization", back_populates="users")
 
 class EmissionFactor(Base):
-    """Model for standard emission conversion factors"""
+    """EmissionFactor model from schema.sql"""
     __tablename__ = "emission_factors"
     
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    organization_id = Column(String(36), ForeignKey("organizations.id"), nullable=True)  # NULL = global factor
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    activity_id = Column(String(255), unique=True, nullable=False, index=True)
+    name = Column(Text, nullable=False)
+    region = Column(String(20), nullable=False)
+    region_name = Column(String(255))
+    country_name = Column(String(255))
+    year = Column(Integer, nullable=False)
+    scope = Column(String(20), nullable=False) # Scope 1, Scope 2, Scope 3
+    sector = Column(String(100))
+    category = Column(String(255))
+    industry_code = Column(String(10))
     
-    # Factor details
-    name = Column(String(255), nullable=False)
-    description = Column(Text, nullable=True)
-    source = Column(String(255), nullable=False)  # e.g., "EPA", "IPCC", "GHG Protocol"
+    factor_value = Column(Numeric(12, 8), nullable=False)
+    factor_value_co2 = Column(Numeric(12, 8))
+    factor_value_ch4 = Column(Numeric(12, 8))
+    factor_value_n2o = Column(Numeric(12, 8))
     
-    # Classification
-    scope = Column(Integer, nullable=False, index=True)  # 1, 2, or 3
-    category = Column(String(100), nullable=False, index=True)  # e.g., "Fuel", "Electricity", "Scope 3 - Waste"
-    subcategory = Column(String(100), nullable=True, index=True)  # e.g., "Gasoline", "Coal", "Grid"
+    activity_unit = Column(String(50), nullable=False)
+    emissions_unit = Column(String(50))
+    emissions_type = Column(String(100))
     
-    # Factor value and unit
-    factor_value = Column(Float, nullable=False)  # CO2e value
-    factor_unit = Column(String(50), nullable=False)  # e.g., "kg CO2e/kWh", "kg CO2e/liter"
+    calculation_method = Column(String(100))
+    ghg_protocol_method = Column(String(100))
+    gwp_version = Column(String(50))
     
-    # Geographic/regional info
-    region = Column(String(100), nullable=True, index=True)  # e.g., "US-West", "EU", "Global"
-    country = Column(String(100), nullable=True, index=True)
-    
-    # Versioning and dates
-    version = Column(String(50), nullable=False, default="1.0")
-    effective_date = Column(DateTime(timezone=True), nullable=False, index=True)
-    expiry_date = Column(DateTime(timezone=True), nullable=True)
-    is_active = Column(Boolean, default=True, index=True)
-    
-    # Metadata
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
-    
-    # Relationships
-    organization = relationship("Organization", back_populates="emission_factors")
-    transactions = relationship("EmissionTransaction", back_populates="emission_factor")
-    
-    # Indexes
-    __table_args__ = (
-        Index("idx_factor_scope_category", "scope", "category"),
-        Index("idx_factor_region_active", "region", "is_active"),
-    )
-
-
-class AuditLog(Base):
-    """Model for audit logging and compliance"""
-    __tablename__ = "audit_logs"
-    
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    organization_id = Column(String(36), ForeignKey("organizations.id"), nullable=False, index=True)
-    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
-    
-    # Action details
-    action = Column(String(50), nullable=False)  # CREATE, UPDATE, DELETE, LOGIN, LOGOUT, etc.
-    resource_type = Column(String(100), nullable=False, index=True)  # "User", "EmissionTransaction", etc.
-    resource_id = Column(String(36), nullable=True, index=True)
-    
-    # Change details
-    old_values = Column(JSON, nullable=True)
-    new_values = Column(JSON, nullable=True)
-    
-    # Additional context
-    ip_address = Column(String(45), nullable=True)  # IPv4 or IPv6
-    user_agent = Column(Text, nullable=True)
-    description = Column(Text, nullable=True)
-    
-    # Timestamp
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
-    
-    # Relationships
-    user = relationship("User", back_populates="audit_logs")
-    organization = relationship("Organization", back_populates="audit_logs")
-    
-    # Indexes
-    __table_args__ = (
-        Index("idx_audit_org_date", "organization_id", "created_at"),
-        Index("idx_audit_user_date", "user_id", "created_at"),
-        Index("idx_audit_resource", "resource_type", "resource_id"),
-    )
-
-class EmissionTarget(Base):
-    """Target tracking model (US-4.4)"""
-    __tablename__ = "emission_targets"
-    
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    organization_id = Column(String(36), ForeignKey("organizations.id"), nullable=False)
-    
-    baseline_year = Column(Integer, nullable=False)
-    baseline_emissions = Column(Float, nullable=False)
-    target_year = Column(Integer, nullable=False)
-    target_reduction_percent = Column(Float, nullable=False)
-    target_emissions = Column(Float, nullable=False)
-    
-    scope_1_target = Column(Float, nullable=True)
-    scope_2_target = Column(Float, nullable=True)
-    scope_3_target = Column(Float, nullable=True)
-    
+    data_source_version = Column(String(50))
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), 
-                       onupdate=lambda: datetime.now(timezone.utc))
-    
-    organization = relationship("Organization", back_populates="targets")
+    updated_at = Column(DateTime(timezone=True))
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
 
-
-class ForecastData(Base):
-    """Emissions forecasting data (US-4.5)"""
-    __tablename__ = "forecast_data"
+class EmissionEvent(Base):
+    """EmissionEvent model from schema.sql (Phase 1)"""
+    __tablename__ = "emission_events"
     
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    organization_id = Column(String(36), ForeignKey("organizations.id"), nullable=False)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    # emission_source_id is required in schema but let's make it optional or handle if not present
+    # For simplicity of import, we might need to create sources or link them
+    activity_date = Column(DateTime(timezone=True), nullable=False)
     
-    forecast_date = Column(DateTime(timezone=True), nullable=False)
-    predicted_emissions = Column(Float, nullable=False)
-    confidence_lower = Column(Float, nullable=False)
-    confidence_upper = Column(Float, nullable=False)
+    activity_value = Column(DECIMAL(15, 2), nullable=False)
+    activity_unit_raw = Column(String(50))
+    activity_unit_normalized = Column(String(50), nullable=False)
+    activity_value_normalized = Column(DECIMAL(15, 2), nullable=False)
     
-    model_type = Column(String(50), nullable=False)  # "linear", "arima", etc.
-    accuracy_score = Column(Float, nullable=True)
+    source_type = Column(String(50)) # primary_supplier, secondary_benchmark, estimated
+    scope = Column(String(20)) # Scope 1, Scope 2, Scope 3
+    scope_3_category = Column(String(20))
+    
+    activity_id_matched = Column(String(255), ForeignKey("emission_factors.activity_id"))
+    confidence_score = Column(Numeric(3, 2))
+    needs_review = Column(Boolean, default=False)
+    verified_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
     
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     
-    organization = relationship("Organization", back_populates="forecasts")
+    organization = relationship("Organization", back_populates="emission_events")
+    calculation_ledger = relationship("CalculationLedger", back_populates="emission_event", uselist=False)
 
+class CalculationLedger(Base):
+    """CalculationLedger model from schema.sql (Phase 2)"""
+    __tablename__ = "calculation_ledger"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    batch_id = Column(String(100))
+    calculation_timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    
+    emission_event_id = Column(UUID(as_uuid=True), ForeignKey("emission_events.id", ondelete="RESTRICT"), nullable=False)
+    
+    activity_value = Column(Numeric(15, 2))
+    activity_unit_normalized = Column(String(50))
+    
+    emission_factor_id = Column(UUID(as_uuid=True), ForeignKey("emission_factors.id"), nullable=True)
+    emission_factor_value = Column(Numeric(12, 8))
+    
+    result_kg_co2e = Column(DECIMAL(15, 2))
+    result_kg_total = Column(DECIMAL(15, 2))
+    
+    fell_back_to_climatiq = Column(Boolean, default=False)
+    
+    calculated_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    
+    organization = relationship("Organization", back_populates="calculation_ledgers")
+    emission_event = relationship("EmissionEvent", back_populates="calculation_ledger")
 
+class AuditTrail(Base):
+    """AuditTrail model from schema.sql"""
+    __tablename__ = "audit_trail"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    action_type = Column(String(100))
+    resource_type = Column(String(100))
+    resource_id = Column(UUID(as_uuid=True))
+    actor_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    old_values = Column(JSON)
+    new_values = Column(JSON)
+    action_timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+# FlaggedEvent for Phase 2
 class FlaggedEvent(Base):
-    """Model for flagged anomalies and gaps (Phase 2 - The Auditor)"""
     __tablename__ = "flagged_events"
-    
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    organization_id = Column(String(36), ForeignKey("organizations.id"), nullable=False, index=True)
-    
-    # Event classification
-    type = Column(String(50), nullable=False, index=True)  # "anomaly", "gap"
-    severity = Column(String(20), nullable=False)  # "low", "medium", "high"
-    
-    # Details
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    type = Column(String(50), nullable=False)
+    severity = Column(String(20), nullable=False)
     description = Column(String(500), nullable=False)
-    details = Column(JSON, nullable=True)  # Store specific data like "missing_month": "Feb"
-    
-    # Status tracking
-    status = Column(String(50), default="open", index=True)  # "open", "resolved", "dismissed"
-    resolution_notes = Column(Text, nullable=True)
-    resolved_at = Column(DateTime(timezone=True), nullable=True)
-    resolved_by_user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
-    
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
-    
-    # Relationships
-    organization = relationship("Organization", back_populates="flagged_events")
-    resolved_by_user = relationship("User", foreign_keys=[resolved_by_user_id])
-
-
-# Update Organization relationship to include flagged_events
-Organization.flagged_events = relationship("FlaggedEvent", back_populates="organization", cascade="all, delete-orphan")
+    details = Column(JSON)
+    status = Column(String(50), default="open")
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

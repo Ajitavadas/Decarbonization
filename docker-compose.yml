@@ -49,7 +49,9 @@ services:
       REDIS_URL: redis://redis:6379
       SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-prod}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GROQ_API_KEY: ${GROQ_API_KEY}
       AI_MIN_CONFIDENCE_THRESHOLD: ${AI_MIN_CONFIDENCE_THRESHOLD:-0.80}
+      PYTHONUNBUFFERED: 1
     depends_on:
       postgres:
         condition: service_healthy
@@ -69,18 +71,26 @@ services:
   # Frontend Dashboard
   frontend:
     build:
-      context: ./decarbonization-frontend
+      context: ./v0_frontend
       dockerfile: Dockerfile
+      target: deps # Build up to deps stage for dev
     container_name: decarb_frontend
     ports:
-      - "3000:80"
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+      - CHOKIDAR_USEPOLLING=true # Better file watching in Docker
     depends_on:
       api:
         condition: service_healthy
+    volumes:
+      - ./v0_frontend:/app
+      - /app/node_modules # Don't overwrite node_modules with host
+    command: npm run dev
     networks:
       - decarb-network
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
       interval: 10s
       timeout: 5s
       retries: 3

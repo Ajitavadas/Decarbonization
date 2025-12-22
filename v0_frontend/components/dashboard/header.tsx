@@ -1,6 +1,6 @@
 "use client"
 
-import { Bell, MessageSquare, Search, User } from "lucide-react"
+import { Bell, MessageSquare, Search, User, Cloud } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -74,6 +74,37 @@ export function Header({ onToggleCopilot, copilotOpen }: HeaderProps) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* Upload Button */}
+        <div className="flex items-center gap-2">
+          <input
+            type="file"
+            id="csv-upload"
+            className="hidden"
+            accept=".csv,.xlsx"
+            onChange={async (e) => {
+              const file = e.target.files?.[0]
+              if (file) {
+                try {
+                  const { uploadCSV } = await import("@/lib/api")
+                  const result = await uploadCSV(file)
+                  alert(`Upload started! Import ID: ${result.import_id}`)
+                } catch (err) {
+                  alert(`Upload failed: ${err}`)
+                }
+              }
+            }}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => document.getElementById("csv-upload")?.click()}
+            className="gap-2"
+          >
+            <Cloud className="h-4 w-4" />
+            <span className="hidden sm:inline">Upload CSV</span>
+          </Button>
+        </div>
 
         {/* Carbon Copilot Toggle */}
         <Button
