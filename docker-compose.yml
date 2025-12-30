@@ -1,104 +1,127 @@
 services:
-  # PostgreSQL with TimescaleDB
+  # PostgreSQL Database
   postgres:
-    image: postgis/postgis:16-3.4
-    container_name: decarb_postgres
+    image: postgres:16-alpine
+    container_name: decarbonization-db
     environment:
-      POSTGRES_USER: decarb_user
-      POSTGRES_PASSWORD: decarb_password
-      POSTGRES_DB: decarb_db
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: carbon_user
+      POSTGRES_PASSWORD: carbon_password
+      POSTGRES_DB: decarbonization_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U decarb_user -d decarb_db"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U carbon_user"]
+      interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - decarb-network
 
-  # Redis Cache
+  # Redis Cache & Message Broker
   redis:
     image: redis:7-alpine
-    container_name: decarb_redis
+    container_name: decarbonization-redis
     ports:
       - "6379:6379"
-    command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
+    command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
+      interval: 10s
+      timeout: 3s
       retries: 5
-    networks:
-      - decarb-network
 
-  # Backend API
-  api:
+  # FastAPI Backend
+  backend:
     build:
-      context: ./decarbonization-backend
+      context: ./backend
       dockerfile: Dockerfile
-    container_name: decarb_api
+    container_name: decarbonization-backend
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=postgresql://carbon_user:carbon_password@postgres:5432/decarbonization_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    volumes:
+      - ./backend:/app
     ports:
       - "8000:8000"
-    environment:
-      DATABASE_URL: postgresql+asyncpg://decarb_user:decarb_password@postgres:5432/decarb_db
-      REDIS_URL: redis://redis:6379
-      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-prod}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      GROQ_API_KEY: ${GROQ_API_KEY}
-      AI_MIN_CONFIDENCE_THRESHOLD: ${AI_MIN_CONFIDENCE_THRESHOLD:-0.80}
-      PYTHONUNBUFFERED: 1
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ./decarbonization-backend:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    networks:
-      - decarb-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 5s
-      timeout: 30s
-      retries: 5
 
-  # Frontend Dashboard
-  frontend:
+  # Celery Worker
+  celery-worker:
     build:
-      context: ./v0_frontend
+      context: ./backend
       dockerfile: Dockerfile
-      target: deps # Build up to deps stage for dev
-    container_name: decarb_frontend
-    ports:
-      - "3000:3000"
+    container_name: decarbonization-celery-worker
+    env_file:
+      - ./backend/.env
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
-      - CHOKIDAR_USEPOLLING=true # Better file watching in Docker
-    depends_on:
-      api:
-        condition: service_healthy
+      - DATABASE_URL=postgresql://carbon_user:carbon_password@postgres:5432/decarbonization_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
     volumes:
-      - ./v0_frontend:/app
-      - /app/node_modules # Don't overwrite node_modules with host
-    command: npm run dev
-    networks:
-      - decarb-network
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.core.celery_app worker --loglevel=info --concurrency=4
+
+  # Celery Beat Scheduler
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: decarbonization-celery-beat
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=postgresql://carbon_user:carbon_password@postgres:5432/decarbonization_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.core.celery_app beat --loglevel=info
+
+  # Next.js Frontend (Not yet implemented)
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   container_name: decarbonization-frontend
+  #   environment:
+  #     - NEXT_PUBLIC_API_URL=http://localhost:8000
+  #   volumes:
+  #     - ./frontend:/app
+  #     - /app/node_modules
+  #     - /app/.next
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     - backend
+  #   command: npm run dev
 
 volumes:
   postgres_data:
   redis_data:
 
 networks:
-  decarb-network:
-    driver: bridge
+  default:
+    name: decarbonization-network
