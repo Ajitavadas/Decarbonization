@@ -183,31 +183,25 @@ class CalculationEngine:
             travel_mode: air, car, rail, bus
             origin: Origin location
             destination: Destination location
-            **kwargs: Mode-specific parameters
+            **kwargs: Mode-specific parameters (cabin_class, car_size, car_type, year)
             
         Returns:
             Travel calculation result
         """
-        if travel_mode == "air":
-            result = await self.climatiq_service.calculate_flight_emissions(
-                origin=origin,
-                destination=destination,
-                cabin_class=kwargs.get("cabin_class", "economy"),
-                year=kwargs.get("year", 2024)
-            )
-        else:
-            # Generic distance-based travel
-            result = await self.climatiq_service.client.travel_distance({
-                "origin": {"query": origin},
-                "destination": {"query": destination},
-                "travel_mode": travel_mode,
-                **kwargs
-            })
+        result = await self.climatiq_service.calculate_travel_distance(
+            travel_mode=travel_mode,
+            origin=origin,
+            destination=destination,
+            year=kwargs.get("year"),
+            flight_class=kwargs.get("cabin_class", "economy") if travel_mode == "air" else None,
+            car_size=kwargs.get("car_size") if travel_mode == "car" else None,
+            car_type=kwargs.get("car_type") if travel_mode == "car" else None
+        )
         
-        # Normalize
+        # Normalize response
         return {
             "co2e_kg": float(result.get("co2e", 0)),
-            "distance_km": float(result.get("distance", 0)),
+            "distance_km": float(result.get("distance_km", result.get("distance", 0))),
             "scope": "Scope 3",
             "activity_type": "travel",
             "sub_type": travel_mode

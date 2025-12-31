@@ -28,6 +28,8 @@ async def calculate_electricity(
     Calculate Scope 2 electricity emissions
     
     Critical: Region is REQUIRED (grid carbon intensity varies 10x globally)
+    
+    Example regions: US, GB, DE, ZA, SE, FR, etc. (2-letter ISO codes)
     """
     try:
         result = await climatiq_service.calculate_electricity_emissions(
@@ -37,6 +39,16 @@ async def calculate_electricity(
             renewable_credits=request.renewable_credits
         )
         
+        # Extract CO2e from nested response structure
+        # Climatiq returns: location.consumption.co2e for location-based, market.consumption.co2e for market-based
+        co2e = 0
+        if "location" in result and "consumption" in result["location"]:
+            co2e = result["location"]["consumption"].get("co2e", 0)
+        elif "co2e" in result:
+            co2e = result.get("co2e", 0)
+        elif "total_co2e" in result:
+            co2e = result.get("total_co2e", 0)
+        
         if request.project_id:
             activity = EmissionActivity(
                 project_id=request.project_id,
@@ -44,7 +56,7 @@ async def calculate_electricity(
                 sub_type="electricity",
                 scope="Scope 2",
                 activity_date=request.activity_date or datetime.utcnow(),
-                co2e_kg=result["co2e"],
+                co2e_kg=co2e,
                 region=request.region,
                 year=str(request.year),
                 input_data={
@@ -57,7 +69,7 @@ async def calculate_electricity(
             db.add(activity)
             db.commit()
         
-        return {"success": True, "data": {"co2e_kg": result["co2e"], "scope": "Scope 2"}}
+        return {"success": True, "data": {"co2e_kg": co2e, "scope": "Scope 2", "raw_response": result}}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -73,14 +85,30 @@ async def calculate_fuel(
     Calculate Scope 1 fuel combustion emissions
     
     Direct emissions from owned sources
+    
+    Supported fuel_types: natural_gas, coal, cng, diesel, biodiesel_bio_100,
+    gasoline, ethanol, heavy_fuel_oil, fuel_oil, kerosene, biogas_bio_100,
+    hydrogen, wood_chips_bio_100, recycled_gas, propane
     """
     try:
         result = await climatiq_service.calculate_fuel_emissions(
             fuel_type=request.fuel_type,
-            volume=request.volume,
-            volume_unit=request.volume_unit,
-            year=request.year or 2024
+            amount=request.amount,
+            unit=request.unit,
+            unit_type=request.unit_type,
+            region=request.region,
+            year=request.year
         )
+        
+        # Extract CO2e from nested response structure
+        # Climatiq returns: combustion.co2e for fuel calculations
+        co2e = 0
+        if "combustion" in result:
+            co2e = result["combustion"].get("co2e", 0)
+        elif "co2e" in result:
+            co2e = result.get("co2e", 0)
+        elif "total_co2e" in result:
+            co2e = result.get("total_co2e", 0)
         
         if request.project_id:
             activity = EmissionActivity(
@@ -89,19 +117,21 @@ async def calculate_fuel(
                 sub_type="fuel",
                 scope="Scope 1",
                 activity_date=request.activity_date or datetime.utcnow(),
-                co2e_kg=result["co2e"],
-                year=str(request.year),
+                co2e_kg=co2e,
+                region=request.region,
+                year=str(request.year) if request.year else None,
                 input_data={
                     "fuel_type": request.fuel_type,
-                    "volume": float(request.volume),
-                    "volume_unit": request.volume_unit
+                    "amount": float(request.amount),
+                    "unit": request.unit,
+                    "unit_type": request.unit_type
                 },
-                description=f"Fuel combustion: {request.volume} {request.volume_unit} of {request.fuel_type}"
+                description=f"Fuel combustion: {request.amount} {request.unit} of {request.fuel_type}"
             )
             db.add(activity)
             db.commit()
         
-        return {"success": True, "data": {"co2e_kg": result["co2e"], "scope": "Scope 1"}}
+        return {"success": True, "data": {"co2e_kg": co2e, "scope": "Scope 1", "raw_response": result}}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

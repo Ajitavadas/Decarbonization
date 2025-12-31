@@ -8,12 +8,27 @@ This platform provides enterprise-grade carbon accounting capabilities with:
 
 - ✅ **Automated Scope Classification** - Automatic categorization into Scope 1, 2, and 3
 - ✅ **Multi-Modal Calculations** - Energy, travel, freight, and procurement emissions
-- ✅ **AI-Powered Mapping** - Autopilot NLP for emission factor suggestions
+- ✅ **AI-Powered Mapping** - Autopilot NLP for emission factor suggestions (v1-preview4)
 - ✅ **Batch Processing** - Handle thousands of calculations asynchronously
 - ✅ **Custom ERP Integration** - Map internal codes to emission factors
 - ✅ **Real-time Caching** - Redis-powered response caching
 - ✅ **RESTful API** - Comprehensive FastAPI backend
 - ✅ **Docker-Enabled** - Complete containerized deployment
+
+## 🎯 Verified Climatiq API Endpoints
+
+All 8 Climatiq API endpoints have been tested and verified working:
+
+| Endpoint | Type | Sample Input | Sample Output |
+|----------|------|--------------|---------------|
+| Electricity | Scope 2 | 13,000 kWh in ZA | **11,264.50 kg CO2e** |
+| Fuel Combustion | Scope 1 | 23,000L natural gas | **44.26 kg CO2e** |
+| Air Travel | Scope 3 | CDG → BER (economy) | **175.68 kg CO2e** |
+| Travel Spend | Scope 3 | €10,000 hotel (Switzerland) | **1,332.66 kg CO2e** |
+| Freight | Scope 3 | 250kg BCN → HAM (air) | **730.28 kg CO2e** |
+| Procurement | Scope 3 | €100 ISIC4:25 (Germany) | **19.80 kg CO2e** |
+| Autopilot Suggest | AI | "Steel manufacturing" | **3 suggestions** |
+| Autopilot Estimate | AI | 100kg Cement (Germany) | **77.00 kg CO2e** |
 
 ## 🏗️ Architecture
 
@@ -95,7 +110,7 @@ This platform provides enterprise-grade carbon accounting capabilities with:
 
 5. **Verify installation**
    ```powershell
-   .\quick_demo.ps1
+   python test_platform.py -q
    ```
    Should show all green checkmarks ✓
 
@@ -105,63 +120,38 @@ This platform provides enterprise-grade carbon accounting capabilities with:
    - **ReDoc**: http://localhost:8000/redoc
    - Frontend: http://localhost:3000 _(Coming soon)_
 
-## 🧪 Testing & Verification
+## 🧪 Testing
 
-### Quick Status Check
-
-Verify all services are operational:
+### Run Tests
 
 ```powershell
-.\quick_demo.ps1
-```
-
-**Expected Output:**
-- ✓ Platform API operational
-- ✓ Health check passed
-- ✓ All Docker services running
-- ✓ Database with 6 tables
-- ✓ Redis cache responding
-- ✓ Celery workers ready
-
-### Comprehensive Test Suite
-
-**PowerShell:**
-```powershell
-.\test_platform.ps1
-```
-
-**Python:**
-```powershell
-pip install requests psycopg2-binary redis celery
+# Full test suite (API + Infrastructure)
 python test_platform.py
+
+# Quick Climatiq API test only
+python test_platform.py -q
 ```
 
-### Interactive API Testing
+### Expected Output (Quick Test)
 
-1. **Open Swagger UI**: http://localhost:8000/docs
-2. **Try an endpoint**: Click on any endpoint → "Try it out"
-3. **No auth required for testing**: Most endpoints visible in Swagger
-4. **Example**: Test `/estimate/single` with sample emission data
+```
+✓ Electricity emissions: 11,264.50 kg CO2e
+✓ Fuel combustion emissions: 44.26 kg CO2e
+✓ Air travel emissions: 175.68 kg CO2e
+✓ Travel spend emissions: 1,332.66 kg CO2e
+✓ Freight emissions: 730.28 kg CO2e
+✓ Procurement emissions: 19.80 kg CO2e
+✓ Autopilot returned 3 suggestions!
+✓ Autopilot estimate: 77.00 kg CO2e
 
-### Manual Testing Examples
-
-**Check Platform Status:**
-```powershell
-Invoke-WebRequest -Uri http://localhost:8000/ -UseBasicParsing | ConvertFrom-Json
+Results: 8/8 PASSED
+🎉 ALL CLIMATIQ ENDPOINTS WORKING! 🎉
 ```
 
-**View Database Tables:**
-```powershell
-docker exec decarbonization-db psql -U carbon_user -d decarbonization_db -c "\dt"
-```
+### Interactive Testing
 
-**Check Service Logs:**
-```powershell
-docker logs decarbonization-backend --tail 50
-docker logs decarbonization-celery-worker --tail 50
-```
-
-See [README_TESTING.md](README_TESTING.md) for detailed testing guide.
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
 
 ## 📚 API Documentation
 
@@ -170,42 +160,36 @@ See [README_TESTING.md](README_TESTING.md) for detailed testing guide.
 #### Authentication
 ```http
 POST /api/v1/auth/register    # Register new user
-POST /api/v1/auth/login        # User login
-GET  /api/v1/auth/me           # Get current user
+POST /api/v1/auth/login       # User login
+GET  /api/v1/auth/me          # Get current user
 ```
 
-#### Estimates
-```http
-POST /api/v1/estimate/single   # Single emission calculation
-POST /api/v1/estimate/batch    # Batch calculations (async)
-```
-
-#### Travel
-```http
-POST /api/v1/travel/distance   # Distance-based travel (air, car, rail)
-POST /api/v1/travel/spend      # Spend-based travel (hotel, car rental)
-```
-
-#### Energy
+#### Energy (Scope 1 & 2)
 ```http
 POST /api/v1/energy/electricity  # Scope 2 electricity emissions
 POST /api/v1/energy/fuel         # Scope 1 fuel combustion
 ```
 
-#### Freight
+#### Travel (Scope 3)
+```http
+POST /api/v1/travel/distance   # Distance-based travel (air, car, rail)
+POST /api/v1/travel/spend      # Spend-based travel (hotel, car rental)
+```
+
+#### Freight (Scope 3)
 ```http
 POST /api/v1/freight/intermodal  # Multi-leg freight routing
 ```
 
-#### Procurement
+#### Procurement (Scope 3)
 ```http
 POST /api/v1/procurement/calculate  # Spend-based procurement (EEIO)
 ```
 
-#### Autopilot
+#### Autopilot (AI-powered)
 ```http
 POST /api/v1/autopilot/suggest    # AI emission factor suggestions
-POST /api/v1/autopilot/estimate   # Combined suggest + calculate
+POST /api/v1/autopilot/estimate   # One-shot AI estimate
 ```
 
 #### Custom Mappings
@@ -215,19 +199,16 @@ GET  /api/v1/mappings/              # List organization mappings
 POST /api/v1/mappings/estimate      # Calculate using mapping
 ```
 
-### Example API Call
+### Example API Calls
 
-**Calculate Flight Emissions:**
+**1. Electricity Emissions (Scope 2):**
 ```bash
-curl -X POST "http://localhost:8000/api/v1/travel/distance" \
+curl -X POST "http://localhost:8000/api/v1/energy/electricity" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "origin": "JFK",
-    "destination": "LHR",
-    "travel_mode": "air",
-    "cabin_class": "economy",
-    "project_id": "PROJECT_UUID"
+    "region": "ZA",
+    "energy_kwh": 13000
   }'
 ```
 
@@ -236,12 +217,105 @@ curl -X POST "http://localhost:8000/api/v1/travel/distance" \
 {
   "success": true,
   "data": {
-    "co2e_kg": 486.3,
-    "distance_km": 5541,
-    "scope": "Scope 3",
-    "activity_type": "travel"
+    "co2e_kg": 11264.5,
+    "scope": "Scope 2"
   }
 }
+```
+
+**2. Air Travel Emissions (Scope 3):**
+```bash
+curl -X POST "http://localhost:8000/api/v1/travel/distance" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "origin": "CDG",
+    "destination": "BER",
+    "travel_mode": "air",
+    "cabin_class": "economy",
+    "passengers": 1
+  }'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "co2e_kg": 175.68,
+    "distance_km": 855.47,
+    "scope": "Scope 3"
+  }
+}
+```
+
+**3. Fuel Combustion (Scope 1):**
+```bash
+curl -X POST "http://localhost:8000/api/v1/energy/fuel" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fuel_type": "natural_gas",
+    "amount": 23000,
+    "unit": "l",
+    "unit_type": "volume",
+    "region": "US"
+  }'
+```
+
+**4. Freight Emissions (Scope 3):**
+```bash
+curl -X POST "http://localhost:8000/api/v1/freight/intermodal" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "origin": "BCN",
+    "destination": "HAM",
+    "transport_mode": "air",
+    "cargo_weight": 250,
+    "weight_unit": "kg"
+  }'
+```
+
+**5. Procurement EEIO (Scope 3):**
+```bash
+curl -X POST "http://localhost:8000/api/v1/procurement/calculate" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 100,
+    "currency": "eur",
+    "classification_code": "25",
+    "classification_type": "isic4",
+    "region": "DE",
+    "spend_year": 2022
+  }'
+```
+
+**6. Autopilot AI Suggest:**
+```bash
+curl -X POST "http://localhost:8000/api/v1/autopilot/suggest" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Steel manufacturing",
+    "max_suggestions": 3
+  }'
+```
+
+**7. Autopilot AI Estimate:**
+```bash
+curl -X POST "http://localhost:8000/api/v1/autopilot/estimate" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Cement",
+    "amount": 100,
+    "unit": "kg",
+    "unit_type": "weight",
+    "region": "DE"
+  }'
+```
 ```
 
 ## 🗄️ Database Schema
@@ -329,16 +403,12 @@ uvicorn app.main:app --reload
 
 ### Running Tests
 
-**Use the provided test scripts:**
 ```powershell
-# Quick platform status check
-.\quick_demo.ps1
-
-# Comprehensive test suite
-.\test_platform.ps1
-
-# Or Python version
+# Full test suite (API + Infrastructure)
 python test_platform.py
+
+# Quick Climatiq API test only
+python test_platform.py -q
 ```
 
 **Run tests inside Docker container:**
@@ -497,31 +567,83 @@ For issues and questions:
 
 ## 🎯 Roadmap
 
-**Completed ✅:**
-- [x] FastAPI backend with 11 endpoint groups
-- [x] PostgreSQL database with 6 tables
-- [x] Celery async task processing
-- [x] Redis caching layer
-- [x] Docker orchestration
-- [x] Comprehensive test suite
-- [x] Climatiq API integration (all 7 endpoint groups)
-- [x] Automatic scope classification
-- [x] Batch processing with progress tracking
+### Phase 1: Core Backend ✅ (Completed)
 
-**In Progress 🚧:**
-- [ ] Frontend dashboard implementation
-- [ ] User authentication UI
-- [ ] Fix bcrypt password hashing edge case
+| Feature | Status | Description |
+|---------|--------|-------------|
+| FastAPI Backend | ✅ Done | Async Python web framework with 11 endpoint groups |
+| PostgreSQL Database | ✅ Done | 6 tables with JSONB support for flexible data |
+| Redis Caching | ✅ Done | Sub-millisecond response times, 24hr TTL |
+| Celery Workers | ✅ Done | Async batch processing with progress tracking |
+| Docker Deployment | ✅ Done | Full containerization with docker-compose |
+| JWT Authentication | ✅ Done | Secure user auth with bcrypt password hashing |
 
-**Planned 📋:**
-- [ ] PDF report generation
-- [ ] Email notifications
-- [ ] Webhook integrations
-- [ ] Multi-language support
-- [ ] Advanced data visualization
-- [ ] Machine learning predictions
-- [ ] Export to Excel/CSV
-- [ ] GHG Protocol compliance reports
+### Phase 2: Climatiq Integration ✅ (Completed)
+
+| Endpoint | Scope | Status | Description |
+|----------|-------|--------|-------------|
+| Electricity | Scope 2 | ✅ Done | Grid location-based calculations |
+| Fuel Combustion | Scope 1 | ✅ Done | Multiple fuel types (diesel, natural gas, etc.) |
+| Travel Distance | Scope 3 | ✅ Done | Air/car/rail with cabin class support |
+| Travel Spend | Scope 3 | ✅ Done | Hotel, car rental spend-based |
+| Freight Intermodal | Scope 3 | ✅ Done | Multi-modal routing (air, sea, road, rail) |
+| Procurement EEIO | Scope 3 | ✅ Done | ISIC4/NAICS industry classification |
+| Autopilot Suggest | AI | ✅ Done | NLP-powered emission factor search |
+| Autopilot Estimate | AI | ✅ Done | One-shot AI calculation |
+
+### Phase 3: Frontend Dashboard 🚧 (In Progress)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Next.js Setup | 🚧 Pending | React framework with TypeScript |
+| Authentication UI | 🚧 Pending | Login, register, password reset |
+| Dashboard Overview | 🚧 Pending | Total emissions, trends, scope breakdown |
+| Data Entry Forms | 🚧 Pending | Guided emission data input |
+| Charts & Visualization | 🚧 Pending | Recharts integration |
+
+### Phase 4: Reporting & Analytics 📋 (Planned)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| PDF Report Generation | 📋 Planned | GHG Protocol compliant reports |
+| Excel/CSV Export | 📋 Planned | Bulk data export |
+| Emission Trends | 📋 Planned | Year-over-year comparisons |
+| Reduction Targets | 📋 Planned | Goal setting and tracking |
+| Benchmark Comparisons | 📋 Planned | Industry averages |
+
+### Phase 5: Enterprise Features 📋 (Planned)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Multi-tenant Support | 📋 Planned | Organization-level isolation |
+| Role-based Access | 📋 Planned | Admin, editor, viewer roles |
+| Audit Logging | 📋 Planned | Complete activity trail |
+| Webhook Integrations | 📋 Planned | Real-time notifications |
+| Email Notifications | 📋 Planned | Alerts and reminders |
+| API Rate Limiting | 📋 Planned | Usage quotas and throttling |
+
+### Phase 6: Advanced AI 📋 (Future)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| ML Predictions | 📋 Future | Forecast future emissions |
+| Anomaly Detection | 📋 Future | Flag unusual data patterns |
+| Recommendation Engine | 📋 Future | Suggest reduction strategies |
+| Natural Language Queries | 📋 Future | "What were my Q3 travel emissions?" |
+
+---
+
+## 📝 License
+
+MIT License - See LICENSE file for details.
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ---
 

@@ -1,24 +1,20 @@
 """
 Climatiq Service Layer
 Business logic facade for Climatiq API interactions
+
+Updated to match exact Climatiq API format based on official documentation:
+- Electricity: /energy/electricity with amount/components structure
+- Fuel: /energy/fuel with fuel_type and amount structure  
+- Travel: /travel/distance and /travel/spend with origin/destination objects
+- Freight: /freight/intermodal with route array (location/transport_mode alternating)
+- Procurement: /procurement/spend with classification object
+- Autopilot: /autopilot/estimate and /autopilot/suggest with text/domain/parameters
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 from decimal import Decimal
 
 from app.integration.climatiq.client import ClimatiqClient
-from app.integration.climatiq.schemas import (
-    EstimateRequest,
-    EstimateResponse,
-    BatchEstimateRequest,
-    DistanceTravelRequest,
-    SpendTravelRequest,
-    ElectricityRequest,
-    FuelRequest,
-    IntermodalFreightRequest,
-    ProcurementRequest,
-    AutopilotSuggestRequest
-)
 from app.core.config import settings
 
 
@@ -27,7 +23,7 @@ class ClimatiqService:
     High-level service for Climatiq API operations
     
     Provides:
-    - Type-safe API interactions using Pydantic schemas
+    - Type-safe API interactions matching Climatiq's exact JSON format
     - Business logic abstraction
     - Response normalization
     """
@@ -45,7 +41,7 @@ class ClimatiqService:
         year: Optional[int] = None
     ) -> Dict[str, Any]:
         """
-        Calculate single emission estimate
+        Calculate single emission estimate using generic estimate endpoint
         
         Args:
             activity_id: Climatiq activity ID
@@ -56,13 +52,19 @@ class ClimatiqService:
         Returns:
             Estimate result with co2e
         """
+        emission_factor = {
+            "activity_id": activity_id,
+            "data_version": settings.CLIMATIQ_DATA_VERSION
+        }
+        
+        # Only include region/year if provided (avoid null values)
+        if region:
+            emission_factor["region"] = region
+        if year:
+            emission_factor["year"] = year
+            
         payload = {
-            "emission_factor": {
-                "activity_id": activity_id,
-                "data_version": settings.CLIMATIQ_DATA_VERSION,
-                "region": region,
-                "year": year
-            },
+            "emission_factor": emission_factor,
             "parameters": parameters
         }
         
@@ -85,6 +87,97 @@ class ClimatiqService:
     
     # ========== Travel Operations ==========
     
+    def _build_location(self, location: Union[str, Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Build location object for Climatiq travel/freight endpoints
+        
+        Supports:
+        - IATA codes (3 letters): {"iata": "CDG"}
+        - Coordinates (lat,lon string): {"latitude": 46.08, "longitude": 2.34}
+        - Free text: {"query": "Berlin, Germany"}
+        """
+        if isinstance(location, dict):
+            return location
+            
+        location_str = str(location).strip()
+        
+        # Check if it's an IATA code (3 uppercase letters)
+        if len(location_str) == 3 and location_str.isupper() and location_str.isalpha():
+            return {"iata": location_str}
+        
+        # Check if it's coordinates (lat, lon format)
+        if "," in location_str:
+            parts = location_str.split(",")
+            if len(parts) == 2:
+                try:
+                    lat = float(parts[0].strip())
+                    lon = float(parts[1].strip())
+                    if -90 <= lat <= 90 and -180 <= lon <= 180:
+                        return {"latitude": lat, "longitude": lon}
+                except ValueError:
+                    pass
+        
+        # Default to free text query
+        return {"query": location_str}
+    
+    async def calculate_travel_distance(
+        self,
+        travel_mode: str,
+        origin: Union[str, Dict[str, Any]],
+        destination: Union[str, Dict[str, Any]],
+        year: Optional[int] = None,
+        flight_class: Optional[str] = None,
+        car_size: Optional[str] = None,
+        car_type: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Calculate activity-based travel emissions
+        
+        Exact format from Climatiq docs:
+        {
+            "origin": {"iata": "CDG"} or {"query": "Berlin"} or {"latitude": X, "longitude": Y},
+            "destination": {...},
+            "year": 2022,
+            "travel_mode": "air" | "car" | "rail",
+            "air_details": {"class": "economy"},
+            "car_details": {"car_size": "large", "car_type": "petrol"}
+        }
+        
+        Args:
+            travel_mode: "air", "car", or "rail"
+            origin: IATA code, coordinates, or location name
+            destination: IATA code, coordinates, or location name
+            year: Travel year
+            flight_class: For air: economy, business, first, average
+            car_size: For car: small, medium, large, average
+            car_type: For car: petrol, diesel, hybrid, plugin_hybrid, battery, average
+            
+        Returns:
+            Travel emissions result
+        """
+        payload = {
+            "origin": self._build_location(origin),
+            "destination": self._build_location(destination),
+            "travel_mode": travel_mode
+        }
+        
+        if year:
+            payload["year"] = year
+        
+        # Add mode-specific details
+        if travel_mode == "air" and flight_class:
+            payload["air_details"] = {"class": flight_class}
+        elif travel_mode == "car":
+            car_details = {}
+            if car_size:
+                car_details["car_size"] = car_size
+            if car_type:
+                car_details["car_type"] = car_type
+            if car_details:
+                payload["car_details"] = car_details
+        
+        return await self.client.travel_distance(payload)
+    
     async def calculate_flight_emissions(
         self,
         origin: str,
@@ -93,7 +186,7 @@ class ClimatiqService:
         year: int = 2024
     ) -> Dict[str, Any]:
         """
-        Calculate air travel emissions
+        Calculate air travel emissions (convenience method)
         
         Args:
             origin: Airport IATA code or location query
@@ -104,15 +197,55 @@ class ClimatiqService:
         Returns:
             Distance and co2e result
         """
-        payload = {
-            "origin": {"query": origin},
-            "destination": {"query": destination},
-            "travel_mode": "air",
-            "year": year,
-            "air_details": {"class": cabin_class}
+        return await self.calculate_travel_distance(
+            travel_mode="air",
+            origin=origin,
+            destination=destination,
+            year=year,
+            flight_class=cabin_class
+        )
+    
+    async def calculate_travel_spend(
+        self,
+        spend_type: str,
+        amount: Decimal,
+        currency: str,
+        spend_year: int,
+        location: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Calculate spend-based travel emissions
+        
+        Exact format from Climatiq docs:
+        {
+            "spend_type": "hotel" | "air" | "rail" | "road" | "sea",
+            "money": 10000,
+            "money_unit": "eur",
+            "spend_year": 2023,
+            "spend_location": {"query": "Bern, Switzerland"}
         }
         
-        return await self.client.travel_distance(payload)
+        Args:
+            spend_type: hotel, air, rail, road, sea
+            amount: Money spent
+            currency: Currency code (eur, usd, gbp, etc.)
+            spend_year: Year of spend (critical for inflation)
+            location: Spend location (optional)
+            
+        Returns:
+            Spend-based co2e result
+        """
+        payload = {
+            "spend_type": spend_type,
+            "money": float(amount),
+            "money_unit": currency.lower(),
+            "spend_year": spend_year
+        }
+        
+        if location:
+            payload["spend_location"] = {"query": location}
+        
+        return await self.client.travel_spend(payload)
     
     async def calculate_hotel_emissions(
         self,
@@ -122,28 +255,15 @@ class ClimatiqService:
         location: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Calculate hotel accommodation emissions from spend
-        
-        Args:
-            spend_amount: Money spent
-            currency: Currency code (usd, eur, gbp)
-            spend_year: Year of spend (critical for inflation)
-            location: Hotel location region
-            
-        Returns:
-            Spend-based co2e result
+        Calculate hotel accommodation emissions from spend (convenience method)
         """
-        payload = {
-            "spend_type": "hotel",
-            "money": float(spend_amount),
-            "money_unit": currency,
-            "spend_year": spend_year
-        }
-        
-        if location:
-            payload["spend_location"] = {"query": location}
-        
-        return await self.client.travel_spend(payload)
+        return await self.calculate_travel_spend(
+            spend_type="hotel",
+            amount=spend_amount,
+            currency=currency,
+            spend_year=spend_year,
+            location=location
+        )
     
     # ========== Energy Operations ==========
     
@@ -152,33 +272,61 @@ class ClimatiqService:
         energy_kwh: Decimal,
         region: str,
         year: int = 2024,
+        connection_type: str = "grid",
+        energy_source: Optional[str] = None,
         renewable_credits: Optional[Decimal] = None
     ) -> Dict[str, Any]:
         """
         Calculate electricity emissions (Scope 2)
         
+        Exact format from Climatiq docs:
+        {
+            "year": 2024,
+            "region": "ZA",
+            "amount": {"energy": 13000, "energy_unit": "kWh"},
+            "components": [{
+                "amount": {"energy": 13000, "energy_unit": "kWh"},
+                "connection_type": "grid",
+                "energy_source": "coal"
+            }],
+            "recs": {"energy": 100, "energy_unit": "kWh"}  // optional
+        }
+        
         Args:
             energy_kwh: Energy consumption in kWh
-            region: Grid region code (required - 10x variance!)
+            region: Grid region code (2-letter ISO or UN-LOCODE) - REQUIRED
             year: Consumption year
-            renewable_credits: RECs for market-based reporting
+            connection_type: "grid" or "direct"
+            energy_source: Optional: coal, natural_gas, biomass, nuclear, renewable
+            renewable_credits: RECs for market-based reporting (kWh)
             
         Returns:
             Scope 2 emissions result
         """
-        payload = {
-            "amount": {
-                "value": float(energy_kwh),
-                "unit": "kWh"
-            },
-            "region": region,
-            "year": year
+        energy_amount = {
+            "energy": float(energy_kwh),
+            "energy_unit": "kWh"
         }
         
+        payload = {
+            "year": year,
+            "region": region,
+            "amount": energy_amount,
+            "components": [{
+                "amount": energy_amount,
+                "connection_type": connection_type
+            }]
+        }
+        
+        # Add energy source if specified
+        if energy_source:
+            payload["components"][0]["energy_source"] = energy_source
+        
+        # Add RECs if specified
         if renewable_credits:
             payload["recs"] = {
-                "value": float(renewable_credits),
-                "unit": "kWh"
+                "energy": float(renewable_credits),
+                "energy_unit": "kWh"
             }
         
         return await self.client.electricity(payload)
@@ -186,28 +334,61 @@ class ClimatiqService:
     async def calculate_fuel_emissions(
         self,
         fuel_type: str,
-        volume: Decimal,
-        volume_unit: str,
-        year: int = 2024
+        amount: Decimal,
+        unit: str,
+        unit_type: str = "volume",
+        region: Optional[str] = None,
+        year: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Calculate fuel combustion emissions (Scope 1)
         
+        Exact format from Climatiq docs:
+        {
+            "fuel_type": "natural_gas",
+            "amount": {"volume": 23000, "volume_unit": "l"},
+            "region": "US",
+            "year": 2021
+        }
+        OR for weight:
+        {
+            "fuel_type": "coal",
+            "amount": {"weight": 10, "weight_unit": "t"},
+            "region": "BR"
+        }
+        
+        Supported fuel_types: natural_gas, coal, cng, diesel, biodiesel_bio_100,
+            gasoline, ethanol, heavy_fuel_oil, fuel_oil, kerosene, biogas_bio_100,
+            hydrogen, wood_chips_bio_100, recycled_gas, propane
+        
         Args:
-            fuel_type: natural_gas, diesel, gasoline, propane
-            volume: Fuel volume
-            volume_unit: liters, gallons, m3
-            year: Consumption year
+            fuel_type: Type of fuel burned
+            amount: Amount of fuel
+            unit: Unit (l, kg, t, gal, m3, kWh, MJ, etc.)
+            unit_type: "volume", "weight", or "energy"
+            region: Country code (optional, 2-letter ISO)
+            year: Consumption year (optional)
             
         Returns:
             Scope 1 emissions result
         """
+        # Build amount object based on unit type
+        if unit_type == "volume":
+            amount_obj = {"volume": float(amount), "volume_unit": unit}
+        elif unit_type == "weight":
+            amount_obj = {"weight": float(amount), "weight_unit": unit}
+        else:  # energy
+            amount_obj = {"energy": float(amount), "energy_unit": unit}
+        
         payload = {
             "fuel_type": fuel_type,
-            "volume": float(volume),
-            "volume_unit": volume_unit,
-            "year": year
+            "amount": amount_obj
         }
+        
+        if region:
+            payload["region"] = region
+        if year:
+            payload["year"] = year
         
         return await self.client.fuel(payload)
     
@@ -215,104 +396,363 @@ class ClimatiqService:
     
     async def calculate_freight_emissions(
         self,
-        route: List[Dict[str, Any]],
-        cargo_weight_kg: Decimal
+        origin: Union[str, Dict[str, Any]],
+        destination: Union[str, Dict[str, Any]],
+        transport_mode: str,
+        cargo_weight: Decimal,
+        weight_unit: str = "kg"
     ) -> Dict[str, Any]:
         """
-        Calculate intermodal freight emissions
+        Calculate simple freight emissions (single leg)
+        
+        Exact format from Climatiq docs:
+        {
+            "route": [
+                {"location": {"query": "Barcelona, Spain"}},
+                {"transport_mode": "air"},
+                {"location": {"query": "Hamburg, Germany"}}
+            ],
+            "cargo": {"weight": 250, "weight_unit": "kg"}
+        }
         
         Args:
-            route: List of transport legs with origin, destination, mode
-            cargo_weight_kg: Cargo weight in kg
+            origin: Start location (query, IATA, UN-LOCODE, or coordinates)
+            destination: End location
+            transport_mode: "air", "road", "rail", "sea"
+            cargo_weight: Weight of cargo
+            weight_unit: "kg", "t", "lb", "ton"
             
         Returns:
-            Total co2e with per-leg breakdown
+            Freight emissions result with total co2e
         """
+        payload = {
+            "route": [
+                {"location": self._build_location(origin)},
+                {"transport_mode": transport_mode},
+                {"location": self._build_location(destination)}
+            ],
+            "cargo": {
+                "weight": float(cargo_weight),
+                "weight_unit": weight_unit
+            }
+        }
+        
+        return await self.client.freight_intermodal(payload)
+    
+    async def calculate_intermodal_freight_emissions(
+        self,
+        route_legs: List[Dict[str, Any]],
+        cargo_weight: Decimal,
+        weight_unit: str = "kg"
+    ) -> Dict[str, Any]:
+        """
+        Calculate multi-leg intermodal freight emissions
+        
+        Args:
+            route_legs: List of legs, each with:
+                - location: origin/waypoint location
+                - transport_mode: mode to next location (optional for last)
+            cargo_weight: Weight of cargo
+            weight_unit: "kg", "t", "lb", "ton"
+            
+        Example route_legs:
+        [
+            {"location": "Barcelona, Spain", "transport_mode": "road"},
+            {"location": "JFK", "transport_mode": "air"},
+            {"location": "Los Angeles, USA"}
+        ]
+            
+        Returns:
+            Freight emissions with per-leg breakdown
+        """
+        # Build route in Climatiq's alternating format
+        route = []
+        for i, leg in enumerate(route_legs):
+            # Add location
+            route.append({"location": self._build_location(leg["location"])})
+            # Add transport mode if not last leg
+            if "transport_mode" in leg:
+                route.append({"transport_mode": leg["transport_mode"]})
+        
         payload = {
             "route": route,
             "cargo": {
-                "weight": float(cargo_weight_kg),
-                "weight_unit": "kg"
+                "weight": float(cargo_weight),
+                "weight_unit": weight_unit
             }
         }
         
         return await self.client.freight_intermodal(payload)
     
     # ========== Procurement Operations ==========
+    # NOTE: Procurement is also an ADD-ON feature.
     
     async def calculate_procurement_emissions(
         self,
         spend_amount: Decimal,
         currency: str,
-        spend_year: int,
         classification_code: str,
-        classification_type: str = "naics2017"
+        classification_type: str = "mcc",
+        region: Optional[str] = None,
+        spend_year: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Calculate spend-based procurement emissions (EEIO)
         
+        Exact format from Climatiq official docs (v1):
+        POST https://api.climatiq.io/procurement/v1/spend
+        {
+            "activity": {
+                "classification_code": "25",
+                "classification_type": "isic4"
+            },
+            "spend_year": 2022,
+            "spend_region": "DE",
+            "money": 100,
+            "money_unit": "eur"
+        }
+        
+        Supported classification_types:
+        - mcc: Merchant Category Codes  
+        - unspsc: United Nations Standard Products and Services Code
+        - isic4: International Standard Industrial Classification
+        - nace2: Statistical Classification of Economic Activities (EU)
+        - naics2017: North American Industry Classification System
+        
         Args:
             spend_amount: Money spent
-            currency: Currency code
-            spend_year: Year (critical for inflation!)
-            classification_code: Industry code
-            classification_type: naics2017, isic4, nace2, mcc
+            currency: Currency code (eur, usd, gbp, etc.)
+            classification_code: Industry/category code
+            classification_type: mcc, unspsc, isic4, nace2, naics2017
+            region: Supplier country (2-letter ISO code) - REQUIRED
+            spend_year: Year of purchase - REQUIRED for inflation adjustment
             
         Returns:
             Scope 3 emissions result
         """
-        payload = {
-            "money": float(spend_amount),
-            "money_unit": currency,
-            "spend_year": spend_year,
-            "classification": {
-                "code": classification_code,
-                "classification_type": classification_type
-            }
+        # Build activity object
+        activity = {
+            "classification_code": str(classification_code),
+            "classification_type": classification_type
         }
+        
+        payload = {
+            "activity": activity,
+            "money": float(spend_amount),
+            "money_unit": currency.lower()
+        }
+        
+        # spend_region is required
+        if region:
+            payload["spend_region"] = region
+        else:
+            raise ValueError("spend_region is required for procurement calculations")
+        
+        # spend_year is required
+        if spend_year:
+            payload["spend_year"] = spend_year
+        else:
+            raise ValueError("spend_year is required for procurement calculations")
         
         return await self.client.procurement(payload)
     
     # ========== Autopilot Operations ==========
+    # NOTE: Autopilot is an ADD-ON feature that requires explicit opt-in from Climatiq.
+    # Contact Climatiq at https://www.climatiq.io/contact-us to enable this feature.
     
     async def suggest_emission_factors(
         self,
-        description: str,
-        domain: str = "general"
+        text: str,
+        max_suggestions: int = 5,
+        unit_type: Optional[List[str]] = None,
+        region: Optional[str] = None,
+        year: Optional[int] = None,
+        source: Optional[List[str]] = None,
+        scope: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
-        Get AI-powered emission factor suggestions
+        Get AI-powered emission factor suggestions (Autopilot Suggest)
+        
+        Exact format from Climatiq docs (v1-preview4):
+        {
+            "suggest": {
+                "text": "Cement",
+                "unit_type": ["Weight", "Money"],
+                "region": "DE",
+                "year": 2022,
+                "source": ["EPA", "BEIS"]
+            },
+            "max_suggestions": 5
+        }
         
         Args:
-            description: Natural language activity description
-            domain: "general" or "manufacturing"
+            text: Natural language activity description
+            max_suggestions: Number of suggestions to return (1-20)
+            unit_type: Filter by unit types: ["Money", "Weight", "Volume", "Energy", "Number"]
+            region: Filter by region (2-letter ISO code)
+            year: Filter by year
+            source: Filter by data sources (e.g., ["EPA", "BEIS", "Ecoinvent"])
+            scope: Filter by scope (e.g., ["1", "2", "3"] or ["3.1", "3.2"])
             
         Returns:
-            List of suggested factors with confidence scores
+            List of suggested factors with suggestion_ids
         """
-        return await self.client.autopilot_suggest(description, domain)
+        suggest = {
+            "text": text
+        }
+        
+        if unit_type:
+            suggest["unit_type"] = unit_type
+        if region:
+            suggest["region"] = region
+        if year:
+            suggest["year"] = year
+        if source:
+            suggest["source"] = source
+        if scope:
+            suggest["scope"] = scope
+        
+        payload = {
+            "suggest": suggest,
+            "max_suggestions": max_suggestions
+        }
+        
+        return await self.client.autopilot_suggest(payload)
     
     async def calculate_with_autopilot(
         self,
-        description: str,
-        parameters: Dict[str, Any]
+        text: str,
+        amount: Optional[Decimal] = None,
+        unit: Optional[str] = None,
+        unit_type: str = "money",
+        region: Optional[str] = None,
+        year: Optional[int] = None,
+        scope: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
-        Combined suggestion + calculation
+        One-shot AI suggestion + calculation (Autopilot One-shot Estimate)
+        
+        Exact format from Climatiq docs (v1-preview4):
+        {
+            "text": "Steel",
+            "parameters": {
+                "money": 100,
+                "money_unit": "usd"
+            }
+        }
+        OR for weight:
+        {
+            "text": "Cement",
+            "parameters": {
+                "weight": 100,
+                "weight_unit": "kg"
+            },
+            "region": "DE",
+            "year": 2022
+        }
         
         Args:
-            description: Natural language activity description
-            parameters: Quantity parameters
+            text: Natural language activity description
+            amount: Quantity value
+            unit: Unit for the amount (eur, usd, kg, t, kWh, etc.)
+            unit_type: "money", "weight", "volume", or "energy"
+            region: Region code (optional)
+            year: Year (optional)
+            scope: Filter by scope (e.g., ["1", "2", "3"])
             
         Returns:
             Estimate with explanation of factor selection
         """
         payload = {
-            "query": description,
-            "parameters": parameters
+            "text": text
         }
         
+        if region:
+            payload["region"] = region
+        if year:
+            payload["year"] = year
+        if scope:
+            payload["scope"] = scope
+        
+        # Build parameters based on unit type
+        if amount is not None and unit:
+            if unit_type == "money":
+                payload["parameters"] = {
+                    "money": float(amount),
+                    "money_unit": unit.lower()
+                }
+            elif unit_type == "weight":
+                payload["parameters"] = {
+                    "weight": float(amount),
+                    "weight_unit": unit.lower()
+                }
+            elif unit_type == "volume":
+                payload["parameters"] = {
+                    "volume": float(amount),
+                    "volume_unit": unit.lower()
+                }
+            elif unit_type == "energy":
+                payload["parameters"] = {
+                    "energy": float(amount),
+                    "energy_unit": unit.lower()
+                }
+        
         return await self.client.autopilot_estimate(payload)
+    
+    async def calculate_with_suggestion(
+        self,
+        suggestion_id: str,
+        amount: Decimal,
+        unit: str,
+        unit_type: str = "weight"
+    ) -> Dict[str, Any]:
+        """
+        Calculate using a suggestion_id from suggest_emission_factors
+        
+        Exact format from Climatiq docs (v1-preview4):
+        {
+            "suggestion_id": "mqydemtghbrtillegaztsljugm2dsllbga2wcljsgfrtcobrmm3dqnbxge...",
+            "parameters": {
+                "weight": 100,
+                "weight_unit": "kg"
+            }
+        }
+        
+        Args:
+            suggestion_id: ID from suggest_emission_factors result
+            amount: Quantity value
+            unit: Unit for the amount
+            unit_type: "money", "weight", "volume", or "energy"
+            
+        Returns:
+            Detailed estimation result
+        """
+        payload = {
+            "suggestion_id": suggestion_id
+        }
+        
+        if unit_type == "money":
+            payload["parameters"] = {
+                "money": float(amount),
+                "money_unit": unit.lower()
+            }
+        elif unit_type == "weight":
+            payload["parameters"] = {
+                "weight": float(amount),
+                "weight_unit": unit.lower()
+            }
+        elif unit_type == "volume":
+            payload["parameters"] = {
+                "volume": float(amount),
+                "volume_unit": unit.lower()
+            }
+        elif unit_type == "energy":
+            payload["parameters"] = {
+                "energy": float(amount),
+                "energy_unit": unit.lower()
+            }
+        
+        return await self.client.autopilot_estimate_with_suggestion(payload)
     
     # ========== Search Operations ==========
     

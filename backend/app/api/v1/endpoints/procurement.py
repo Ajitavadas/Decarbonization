@@ -1,6 +1,8 @@
 """
 Procurement calculation endpoints
 Spend-based emissions using EEIO models
+
+NOTE: Procurement is an ADD-ON feature that requires access from Climatiq.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -27,17 +29,30 @@ async def calculate_procurement(
     """
     Calculate procurement emissions from spend data
     
-    Uses EEIO (Environmentally-Extended Input-Output) models
-    Critical: spend_year is required for inflation adjustment
+    Uses EEIO (Environmentally-Extended Input-Output) models from EXIOBASE
+    
+    Classification types:
+    - mcc: Merchant Category Codes
+    - unspsc: United Nations Standard Products and Services Code  
+    - isic4: International Standard Industrial Classification
+    - nace2: Statistical Classification of Economic Activities (EU)
+    - naics2017: North American Industry Classification System
+    
+    Critical: spend_year and region are REQUIRED for accurate inflation adjustment
     """
     try:
         result = await climatiq_service.calculate_procurement_emissions(
             spend_amount=request.amount,
             currency=request.currency,
-            spend_year=request.spend_year,
             classification_code=request.classification_code,
-            classification_type=request.classification_type
+            classification_type=request.classification_type,
+            region=request.region,
+            spend_year=request.spend_year
         )
+        
+        # Extract co2e from nested estimate object
+        estimate = result.get("estimate", {})
+        co2e = estimate.get("co2e", 0)
         
         if request.project_id:
             activity = EmissionActivity(
@@ -46,21 +61,24 @@ async def calculate_procurement(
                 sub_type="spend_based",
                 scope="Scope 3",
                 activity_date=request.activity_date or datetime.utcnow(),
-                co2e_kg=result["co2e"],
-                year=str(request.spend_year),
+                co2e_kg=co2e,
+                region=request.region,
+                year=str(request.spend_year) if request.spend_year else None,
                 input_data={
                     "amount": float(request.amount),
                     "currency": request.currency,
                     "spend_year": request.spend_year,
                     "classification_code": request.classification_code,
-                    "classification_type": request.classification_type
+                    "classification_type": request.classification_type,
+                    "region": request.region,
+                    "source_trail": result.get("source_trail")
                 },
-                description=f"Procurement: {request.amount} {request.currency} ({request.classification_code})"
+                description=f"Procurement: {request.amount} {request.currency} ({request.classification_type}:{request.classification_code})"
             )
             db.add(activity)
             db.commit()
         
-        return {"success": True, "data": {"co2e_kg": result["co2e"], "scope": "Scope 3"}}
+        return {"success": True, "data": {"co2e_kg": co2e, "scope": "Scope 3", "raw_response": result}}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

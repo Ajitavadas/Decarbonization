@@ -229,52 +229,63 @@ class ClimatiqClient:
         return await self._make_request("POST", "/freight/intermodal", data=payload)
     
     # ========== Procurement Endpoints ==========
+    # NOTE: Procurement is an ADD-ON feature.
     
     async def procurement(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
         Spend-based procurement calculation
-        POST /procurement/spend
+        POST /procurement/v1/spend
         
         Args:
-            payload: Procurement request with money, classification
+            payload: Procurement request with activity, money, spend_region, spend_year
             
         Returns:
             Procurement response with co2e
         """
-        return await self._make_request("POST", "/procurement/spend", data=payload)
+        return await self._make_request("POST", "/procurement/v1/spend", data=payload)
     
     # ========== Autopilot Endpoints ==========
+    # NOTE: Autopilot is an ADD-ON feature that requires explicit opt-in from Climatiq.
+    # Contact Climatiq at https://www.climatiq.io/contact-us to enable this feature.
     
-    async def autopilot_suggest(self, query: str, domain: str = "general") -> Dict[str, Any]:
+    async def autopilot_suggest(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
         Get emission factor suggestions from natural language
-        POST /autopilot/suggest
+        POST /autopilot/v1-preview4/suggest (on preview API)
         
         Args:
-            query: Natural language description
-            domain: "general" or "manufacturing"
+            payload: Suggest request with suggest object containing text, filters
             
         Returns:
-            List of suggested emission factors with confidence scores
+            List of suggested emission factors with suggestion_ids
         """
-        return await self._make_request(
-            "POST",
-            "/autopilot/suggest",
-            data={"query": query, "domain": domain}
-        )
+        return await self._make_request("POST", "/autopilot/v1-preview4/suggest", data=payload, use_preview=True)
     
     async def autopilot_estimate(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Combined suggestion + estimation
-        POST /autopilot/estimate
+        One-shot estimation - combined suggestion + estimation
+        POST /autopilot/v1-preview4/estimate (on preview API)
         
         Args:
-            payload: Query and optional parameters
+            payload: Estimate request with text and parameters
             
         Returns:
             Estimate with transparency about factor selection
         """
-        return await self._make_request("POST", "/autopilot/estimate", data=payload)
+        return await self._make_request("POST", "/autopilot/v1-preview4/estimate", data=payload, use_preview=True)
+    
+    async def autopilot_estimate_with_suggestion(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Calculate estimation using a suggestion_id from autopilot_suggest
+        POST /autopilot/v1-preview4/suggest/estimate (on preview API)
+        
+        Args:
+            payload: Request with suggestion_id and parameters
+            
+        Returns:
+            Detailed estimate with co2e value
+        """
+        return await self._make_request("POST", "/autopilot/v1-preview4/suggest/estimate", data=payload, use_preview=True)
     
     # ========== Search Endpoints ==========
     
