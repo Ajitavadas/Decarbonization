@@ -167,14 +167,19 @@ class ClimatiqService:
             Scope 2 emissions result
         """
         payload = {
-            "energy": float(energy_kwh),
-            "energy_unit": "kWh",
+            "amount": {
+                "value": float(energy_kwh),
+                "unit": "kWh"
+            },
             "region": region,
             "year": year
         }
         
         if renewable_credits:
-            payload["renewable_energy_credits"] = float(renewable_credits)
+            payload["recs"] = {
+                "value": float(renewable_credits),
+                "unit": "kWh"
+            }
         
         return await self.client.electricity(payload)
     

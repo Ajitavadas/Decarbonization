@@ -1,0 +1,160 @@
+,,,,,,,,
+,Intermodal Freight Emissions,,,,,,,
+,Full API Documentation,Methodology Overview,,,,,,
+,,,,,,,,
+,Intermodal Freight overview,,,,,,,
+,"Calculate the total estimated emissions of freight shipping. The distance between the locations will be calculated by considering the actual transport network for road, rail and sea freight where possible. For air, the great circle distance is used.
+The calculated emissions cover the fuel combustion emission, the upstream fuel emissions as well as the hub emissions for all transportation legs and locations. 
+By calling our freight API directly, it's also possible to specify the individual shipment legs as well as the mode of transport used.",,,,,,,
+,,,,,,,,
+,Detailed View on Sample Data,,,,,,,
+,"These are examples of the different Intermodal Freight inputs you could use, all demonstrating how the API deals with different types of inputs and how even small changes can effect the estimated emissions. 
+You can use these inputs in the Excel Add-In, Postman Collection and in your own Python Scripts.
+We also provide an analysis of these inputs to provide a full picture on how the API handles these inputs.",,,,,,,
+,,,,,,,,
+,Input,,,,,Processing,Output,
+,Start,Destination,Mode,Weight,Weight Unit,API Request Code,kg CO2 equivalent,Analysis
+,"Can be free text (Berlin), IATA Code (BER), UN-LOCODE (DE-BER) or coordinates, i.e. lat & lon (52.520008,13.404954)",,"Main mode of transport, i.e. air, road, rail, sea",Weight of the transported goods,"Unit of the weight, e.g, kg, t (metric ton), lb, ton (US short ton)",The code that can be used to make the API request,The kilograms of CO2 equivalent outputted based of the input data,This column will unpack the high-level expected results you will see when you input this sample data into the API
+,"Carrer de Cal Lluquer 85, 08820, Barcelona, Spain","HafenCity, Hamburg, Germany",air,250,kg,"{
+  ""route"": [
+    { ""location"": { ""query"": ""Carrer de Cal Lluquer 85, 08820, Barcelona, Spain"" } },
+    { ""transport_mode"": ""air"" },
+    { ""location"": { ""query"": ""HafenCity, Hamburg, Germany"" } }
+  ],
+  ""cargo"": {
+    ""weight"": 250,
+    ""weight_unit"": ""kg""
+  }
+}",908.5,"This European air freight journey covers a relatively short distance and a light load. The route remains within well-connected EU air corridors, and while air transport is inherently emissions-intensive, the moderate scale of this shipment keeps its environmental impact lower compared to long-haul cases. This scenario highlights how geography and volume jointly influence emission intensity in air freight, making it more manageable when distances are short and goods are light."
+,JED,JFK,air,17,t,"{
+  ""route"": [
+    { ""location"": { ""iata"": ""JED"" } },
+    { ""transport_mode"": ""air"" },
+    { ""location"": { ""iata"": ""JFK"" } }
+  ],
+  ""cargo"": {
+    ""weight"": 17,
+    ""weight_unit"": ""t""
+  }
+}",254336,"In contrast to the first example, this case involves an intercontinental shipment of significantly heavier cargo. The route spans two continents and covers a much greater distance. Despite both endpoints being major international airports, the combination of long-haul air travel and heavy tonnage dramatically increases emissions. This case clearly illustrates how air freight emissions scale steeply with both distance and cargo mass."
+,New York,Mississippi,road,1021,kg,"{
+  ""route"": [
+    { ""location"": { ""iata"": ""JFK"" } },
+    { ""transport_mode"": ""road"" },
+    { ""location"": { ""query"": ""Mississippi"" } }
+  ],
+  ""cargo"": {
+    ""weight"": 1021,
+    ""weight_unit"": ""kg""
+  }
+}",203.1,"This road freight example avoids air altogether and instead uses road transport across a domestic route. Even though the cargo weight is much higher than the first case and the route likely spans a significant portion of the U.S., road transport results in comparatively moderate emissions. This reflects road freight’s lower per-kilogram impact over medium distances, especially when the shipment size allows for fuller vehicle utilization and avoids high-emission modes like air."
+,"Disneyland, Anaheim, USA",JFK,road,895,kg,"{
+  ""route"": [
+    { ""location"": { ""query"": ""Disneyland, Anaheim, USA"" } },
+    { ""transport_mode"": ""road"" },
+    { ""location"": { ""iata"": ""JFK"" } }
+  ],
+  ""cargo"": {
+    ""weight"": 895,
+    ""weight_unit"": ""kg""
+  }
+}",406.6,"This is a domestic road shipment across a considerable distance within the United States. Despite being nearly 900 kg in weight, the use of road transport—as opposed to air—keeps emissions more moderate. The road mode offers a practical balance between reach and environmental impact, especially for medium-to-heavy shipments overland. This case demonstrates how even with heavier loads, road freight remains more carbon-efficient than long-distance air."
+,"221B Baker Street, London, UK","Amsterdam, Netherlands",rail,56,lb,"{
+  ""route"": [
+    { ""location"": { ""query"": ""221B Baker Street, London, UK"" } },
+    { ""transport_mode"": ""rail"" },
+    { ""location"": { ""query"": ""Amsterdam, Netherlands"" } }
+  ],
+  ""cargo"": {
+    ""weight"": 56,
+    ""weight_unit"": ""lb""
+  }
+}",0.2673,"This lightweight shipment travels by rail between two major European cities with strong rail infrastructure and clean electricity grids. The use of rail for such a small load results in extremely low emissions, especially compared to road or air. This route showcases the environmental advantages of rail, even for low-volume shipments, where the infrastructure supports fully electrified, low-carbon transit."
+,Barcelona,Canada,air,100,kg,"{
+  ""route"": [
+    { ""location"": { ""iata"": ""BCN"" } },
+    { ""transport_mode"": ""air"" },
+    { ""location"": { ""query"": ""Canada"" } }
+  ],
+  ""cargo"": {
+    ""weight"": 100,
+    ""weight_unit"": ""kg""
+  }
+}",884.7,"Although the cargo load here is relatively light at 100 kg, the use of intercontinental air freight significantly increases emissions. The carbon impact reflects the long-haul nature of the route and the inherently high emissions intensity of air cargo. Compared to the other two examples, this highlights how distance and transport mode—not just weight—are key drivers of carbon output."
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,Additional sample data,,,,,,,
+,"For more extensive testing, you can find additional input data here. Of course you can also come up with your own inputs!",,,,,,,
+,,,,,,,,
+,Input,,,,,,,
+,Start,Destination,Mode,Weight,Weight Unit,,,
+,DE-HAM,SG-SIN,air,688,kg,,,
+,ORD,AMS,air,1136,kg,,,
+,"Toronto, Canada","221B Baker Street, London, UK",road,680,kg,,,
+,"10 Downing Street, London, UK",AU-SYD,road,280,kg,,,
+,"52.520008,13.404954","48.856613,2.352222",air,423,kg,,,
+,"41.902782,12.496366",JFK,rail,158,kg,,,
+,BE-BRU,"Carrer de Cal Lluquer 85, 08820, Barcelona, Spain",road,556,kg,,,
+,IN-DEL,CDG,sea,877,kg,,,
+,"34.052235,-118.243683","37.774929,-122.419416",road,601,kg,,,
+,US-LAX,NL-RTM,air,845,kg,,,
+,DE-HAM,SG-SIN,air,688,kg,,,
+,ORD,AMS,air,1136,kg,,,
+,"Toronto, Canada","221B Baker Street, London, UK",road,680,kg,,,
+,"10 Downing Street, London, UK",AU-SYD,road,280,kg,,,
+,"52.520008,13.404954","48.856613,2.352222",air,423,kg,,,
+,"41.902782,12.496366",JFK,rail,158,kg,,Start logic,"""latitude"": 42.3345, ""longitude"": 82.1234"
+,BE-BRU,"Carrer de Cal Lluquer 85, 08820, Barcelona, Spain",road,556,kg,,End logic,"""query"": ""Cape Town"""
+,IN-DEL,CDG,sea,877,kg,,,
+,"34.052235,-118.243683","37.774929,-122.419416",road,601,kg,,,
+,US-LAX,NL-RTM,air,845,kg,,,
+,,,,,,,,
+,,,,,,,,
+,Constructing an API Request,,,,,,,
+,"Depending on the freight type (air, road, rail, sea), the API request will look different. Below, we will demonstrate how the JSON code structure will change based on your custom input.
+For Freight, you will need to make a POST request using the url:",,,,,,,
+,https://api.climatiq.io/freight/v2/intermodal,,,,,,,
+,,,,,,,,
+,"For example, if using terminal:
+curl --request POST \
+--url https://api.climatiq.io/freight/v2/intermodal \
+--header ""Authorization: Bearer $CLIMATIQ_API_KEY"" \
+--data '{
+    ""route"": [
+        { ""location"": { ""query"": ""Hamburg"" } },
+        {
+          ""transport_mode"": ""road"" 
+        },
+         
+        { ""location"": { ""query"": ""Berlin"" } }
+    ],
+    ""cargo"": {
+        ""weight"": 10,
+        ""weight_unit"": ""t""
+    }
+}'",,,,,,,
+,,,,,,,,
+,Interactive Input Examples,,,Your customised JSON Request code,,,,
+,Edit the inputs below to see how it would look in the JSON API request code.,,,Below is the request payload for the API that has been adjusted based on your input in the table on the left.,,,,
+,Travel Mode,sea,,"{
+  ""route"": [
+    {
+      ""location"": {""longitude"": ""82.1234"", ""latitude"": ""42.3345""},
+    },
+    {
+      ""transport_mode"": ""sea""
+    },
+    {
+      ""location"": {""query"": ""Cape Town""}
+    }
+  ],
+  ""cargo"": {
+    ""weight"": 100,
+    ""weight_unit"": ""t""
+  }
+}",,,,
+,Origin,"42.3345, 82.1234",,,,,,
+,Destination,Cape Town,,,,,,
+,Cargo Weight,100,,,,,,
+,Cargo Unit,t,,,,,,

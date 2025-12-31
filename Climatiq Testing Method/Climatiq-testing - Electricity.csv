@@ -1,0 +1,230 @@
+,,,,,,,,,
+,Electricity Emissions,,,,,,,,
+,Full API Documentation,Methodology Overview,,,,,,,
+,,,,,,,,,
+,Electricity Overview,,,,,,,,
+,"Estimate the emissions of electricity usage. The function also provides details on the associated scope 3, i.e. the well-to-tank, transmission and distribution losses and their well-to-tank emissions in the output results. 
+If an active subscription is in place, IEA (International Energy Agency) factors will be used for the calculation.",,,,,,,,
+,,,,,,,,,
+,Detailed View on Sample Data,,,,,,,,
+,"These are examples of some of the different Electricity inputs you could use, all demonstrating how the API deals with different types of inputs and how even small changes can effect the estimated emissions. 
+You can use these inputs in the Excel Add-In, Postman Collection and in your own Python Scripts.
+We also provide an analysis of these inputs to provide a full picture on how the API handles these inputs. To view all the possible parameters you can input for Electricity, please click on the ""Full API Documentation"" link above to read more.",,,,,,,,
+,,,,,,,,,
+,Input,,,,,,Processing,Output,
+,Amount,Region,"Year
+Optional","Connection Type
+ Optional","Energy Source
+ Optional","RECs
+ Optional",API Request Code,kg CO2 equivalent,Analysis
+,Amount of electricity consumed in kWh.,The country in which the fuel have been purchased. Must be the 2-digit UN code or UN-LOCODE,Year of the electricity consumption,Either the electricity was delivered via the grid or via a direct line. Default is grid.,"The source that electricity is generated from. Valid values are renewable or specific fuel types such as natural_gas, coal, biomass and nuclear.",Quantity of RECs (Renewable Energy Certificates) to apply for market-based emission calculations.,The code that can be used to make the API request,The kilograms of CO2 equivalent outputted based of the input data,This column will unpack the high-level expected results you will see when you input this sample data into the API
+,13000,ZA,2024,grid,coal,,"{
+    ""year"": 2024,
+    ""region"": ""ZA"",
+    ""amount"": {
+        ""energy"": 13000,
+        ""energy_unit"": ""kWh""
+    },
+    ""components"": [ {
+			""amount"": {
+        ""energy"": 13000,
+        ""energy_unit"": ""kWh""
+    },
+            ""connection_type"": ""grid"",
+            ""energy_source"": ""coal""
+        }
+    ]
+}",12893,"The first entry concerns electricity consumption in South Africa in 2024, delivered via the grid. The energy source identified is coal, and the emission factors are based on the IEA dataset for 2022. South Africa’s heavy reliance on coal for electricity generation leads to a high carbon intensity, a predictable outcome given the country’s coal-dominated energy mix. Coal, as a fuel, is one of the most carbon-intensive sources of electricity globally, and this underpins the relatively high emissions that would be outputted in this case."
+,13000,SE,2024,grid,coal,,"{
+    ""year"": 2024,
+    ""region"": ""SE"",
+    ""amount"": {
+        ""energy"": 13000,
+        ""energy_unit"": ""kWh""
+    },
+    ""components"": [ {
+			""amount"": {
+        ""energy"": 13000,
+        ""energy_unit"": ""kWh""
+    },
+            ""connection_type"": ""grid"",
+            ""energy_source"": ""coal""
+        }
+    ]
+}",159.9,"In contrast, the second example reports electricity consumption in Sweden for the same year, 2024, also supplied through the grid with the energy source again as coal. This is surprising because Sweden’s grid mix is overwhelmingly renewable (primarily hydropower and nuclear), meaning coal is generally a minimal contributor and emission impact is dramatically lower compared to South Africa. This highlights how the baseline grid mix of a country—even when the fuel type seems similar—massively influences the outcome, and Sweden’s broader reliance on clean energy helps suppress carbon intensity even when fossil fuels appear in the profile."
+,100,GB,2017,direct,natural_gas,100,"{
+    ""year"": 2017,
+    ""region"": ""GB"",
+    ""amount"": {
+        ""energy"": 100,
+        ""energy_unit"": ""kWh""
+    },
+		""recs"": {
+        ""energy"": 100,
+        ""energy_unit"": ""kWh""
+    },
+    ""components"": [ {
+			""amount"": {
+        ""energy"": 100,
+        ""energy_unit"": ""kWh""
+    },
+            ""connection_type"": ""direct"",
+            ""energy_source"": ""natural_gas""
+        }
+    ]
+}",38.56,"The third data row shifts the focus to the United Kingdom, with electricity consumed in 2017, supplied through a direct connection rather than the public grid. Here, the energy source specified is natural gas, a fossil fuel that is less carbon-intensive than coal but still significant. The emission results would be calculated using BEIS data for 2021. Compared to Sweden’s coal result, the use of natural gas—and particularly direct supply—marks a change toward lower emissions, as direct lines can often imply more controlled, efficient electricity delivery."
+,100,GB,2025,direct,natural_gas,100,"{
+    ""year"": 2025,
+    ""region"": ""GB"",
+    ""amount"": {
+        ""energy"": 100,
+        ""energy_unit"": ""kWh""
+    },
+		""recs"": {
+        ""energy"": 100,
+        ""energy_unit"": ""kWh""
+    },
+    ""components"": [ {
+			""amount"": {
+        ""energy"": 100,
+        ""energy_unit"": ""kWh""
+    },
+            ""connection_type"": ""direct"",
+            ""energy_source"": ""natural_gas""
+        }
+    ]
+}",38.47,"The fourth result is also from the United Kingdom, but this time looking ahead to 2025. Like the previous entry, the connection type is direct and the energy source is again natural gas. Despite the matching conditions, the expected minor differences likely stem from improvements in grid efficiency and cleaner supply chains over time, as reflected by the updated BEIS dataset. This comparison between 2017 and 2025 illustrates how temporal changes—such as policy shifts, decarbonization efforts, and cleaner technologies—are critical factors alongside geography and fuel type."
+,2048,FR,2022,grid,biomass,,"{
+    ""year"": 2022,
+    ""region"": ""FR"",
+    ""amount"": {
+        ""energy"": 2048,
+        ""energy_unit"": ""kWh""
+    },
+		""recs"": {
+        ""energy"": 100,
+        ""energy_unit"": ""kWh""
+    },
+    ""components"": [ {
+			""amount"": {
+        ""energy"": 2048,
+        ""energy_unit"": ""kWh""
+    },
+            ""connection_type"": ""grid"",
+            ""energy_source"": ""biomass""
+        }
+    ]
+}",158.3,"The fifth case involves France in 2022, with electricity supplied via the grid and sourced from biomass. Unlike the fossil fuel examples above, biomass is often regarded as a renewable energy source, although it can still have notable emissions depending on feedstock and combustion methods. Compared to the UK’s natural gas supply, France’s reliance on biomass highlights a greater orientation toward renewable energy strategies. However, biomass-related emissions can sometimes rival or exceed those from cleaner fossil fuels, indicating that “renewable” does not automatically guarantee “low carbon”."
+,2048,DK,2022,grid,biomass,,"{
+    ""year"": 2022,
+    ""region"": ""DK"",
+    ""amount"": {
+        ""energy"": 2048,
+        ""energy_unit"": ""kWh""
+    },
+		""recs"": {
+        ""energy"": 100,
+        ""energy_unit"": ""kWh""
+    },
+    ""components"": [ {
+			""amount"": {
+        ""energy"": 2048,
+        ""energy_unit"": ""kWh""
+    },
+            ""connection_type"": ""grid"",
+            ""energy_source"": ""biomass""
+        }
+    ]
+}",196.8,"The sixth entry pertains to Denmark in 2022, again using grid electricity and sourced from biomass. Interestingly, although both France and Denmark show biomass as their main energy source, France’s emissions are lower when you calculate the results. This contrast is explained by differences in their overall grid compositions: France’s electricity mix is heavily dominated by low-carbon nuclear power, which substantially lowers its national emission factor even when some biomass is present. In contrast, Denmark relies much more heavily on biomass as a primary contributor to its energy system, without the offsetting effect of nuclear energy, making the carbon intensity of its grid higher despite a renewable profile. This highlights that the broader national energy mix, not just the primary listed fuel type, critically shapes the final emissions outcome.
+"
+,,,,,,,,,
+,,,,,,,,,
+,,,,,,,,,
+,Additional sample data,,,,,,,,
+,"For more extensive testing, you can find additional input data here. Of course you can also come up with your own inputs!",,,,,,,,
+,,,,,,,,,
+,Input,,,,,,,,
+,Amount,Region,Year,"Connection Type
+ Optional","Energy Source
+ Optional","RECs
+ Optional",,,
+,37182,NL,2024,grid,renewable,20,,,
+,2275,FI,2022,direct,biomass,,,,
+,15080,CN,2023,grid,biomass,3000,,,
+,41377,SE,2021,grid,nuclear,,,,
+,30931,CH,2024,direct,natural_gas,,,,
+,2712,ES,2021,direct,coal,,,,
+,10167,CN,2023,direct,nuclear,,,,
+,16724,CN,2022,grid,natural_gas,100,,,
+,16658,IT,2022,direct,biomass,,,,
+,20881,CH,2022,direct,nuclear,,,,
+,22688,DE,2025,direct,natural_gas,,,,
+,45945,DE,2025,direct,nuclear,,,,
+,34872,BE,2025,grid,natural_gas,125,,,
+,11612,CA,2021,grid,natural_gas,,,,
+,2727,IN,2022,direct,biomass,,,,
+,22512,JP,2021,grid,biomass,,,,
+,19549,NO,2022,direct,biomass,300,,,
+,30477,GB,2021,direct,coal,100,,,
+,20673,FI,2023,grid,renewable,,,,
+,36991,CA,2021,grid,coal,113,,,
+,,,,,,,,,
+,Constructing an API Request,,,,,,,,
+,"Based on the types of Energy inputs you have, the API request will look different. Below, we will demonstrate how the JSON code structure will change based on your custom input.",,,,,,,,
+,"For Electricity, you will need to make a POST request using the url:",,,,,,,,
+,https://api.climatiq.io/energy/v1/electricity,,,,,,,,
+,,,,,,,,,
+,"For example, if using terminal:
+curl --request POST \
+  --url https://api.climatiq.io/energy/v1/electricity \
+  --header ""Authorization: Bearer $CLIMATIQ_API_KEY"" \
+  --data '{
+    ""year"": 2022,
+    ""region"": ""DK"",
+    ""amount"": {
+        ""energy"": 2048,
+        ""energy_unit"": ""kWh""
+    },
+    ""recs"": {
+        ""energy"": 100,
+        ""energy_unit"": ""kWh""
+    },
+    ""components"": [ {
+                        ""amount"": {
+        ""energy"": 2000,
+        ""energy_unit"": ""kWh""
+    },
+            ""connection_type"": ""grid"",
+            ""energy_source"": ""biomass""
+        }
+    ]
+}'",,,,,,,,
+,,,,,,,,,
+,Interactive Input Examples,,,Your customised JSON Request code,,,,,
+,Edit the inputs below to see how it would look in the JSON API request code.,,,Below is the request payload for the API that has been adjusted based on your input in the table on the left.,,,,,
+,Year,2023,,"{
+""year"": 2023,
+""region"": ""DE"",
+""amount"": {
+    ""energy"": 5000,
+    ""energy_unit"": ""kWh""
+},
+""recs"": {
+    ""energy"": 100,
+    ""energy_unit"": ""kWh""
+},
+""components"": [
+    {
+        ""amount"": {
+            ""energy"": 5000,
+            ""energy_unit"": ""kWh""
+        },
+        ""connection_type"": ""direct"",
+        ""energy_source"": ""petrol""}
+]
+}",,,,,
+,Region,DE,,,,,,,
+,Amount,5000,,,,,,,
+,Connection Type,direct,,,,,,,
+,Energy Source,petrol,,,,,,,
+,RECs,100,,,,,,,
