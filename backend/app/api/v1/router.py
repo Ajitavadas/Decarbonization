@@ -9,7 +9,8 @@ from app.api.v1.endpoints import (
     upload,
     activities,
     projects,
-    batch
+    batch,
+    organizations
 )
 
 api_router = APIRouter()
@@ -20,3 +21,5 @@ api_router.include_router(upload.router, prefix="/upload", tags=["File Upload"])
 api_router.include_router(activities.router, prefix="/activities", tags=["Activities"])
 api_router.include_router(projects.router, prefix="/projects", tags=["Projects"])
 api_router.include_router(batch.router, prefix="/batch", tags=["Batch Operations"])
+api_router.include_router(organizations.router, prefix="/organizations", tags=["Organizations"])
+

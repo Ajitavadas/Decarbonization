@@ -9,6 +9,7 @@ from datetime import timedelta
 
 from app.db.session import get_db
 from app.models.user import User
+from app.models.organization import Organization
 from app.schemas import UserCreate, UserLogin, UserResponse, TokenResponse, ResponseBase
 from app.core.security import (
     verify_password,
@@ -23,7 +24,7 @@ router = APIRouter()
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(user_in: UserCreate, db: Session = Depends(get_db)):
-    """Register new user"""
+    """Register new user with organization"""
     # Check if user exists
     existing_user = db.query(User).filter(User.email == user_in.email).first()
     if existing_user:
@@ -32,11 +33,21 @@ async def register(user_in: UserCreate, db: Session = Depends(get_db)):
             detail="Email already registered"
         )
     
-    # Create new user
+    # Create organization for new user
+    org_name = f"{user_in.full_name}'s Organization" if user_in.full_name else f"{user_in.email.split('@')[0]}'s Organization"
+    org = Organization(
+        name=org_name,
+        is_active=True
+    )
+    db.add(org)
+    db.flush()  # Get org.id before creating user
+    
+    # Create new user with organization
     user = User(
         email=user_in.email,
         full_name=user_in.full_name,
-        hashed_password=get_password_hash(user_in.password)
+        hashed_password=get_password_hash(user_in.password),
+        organization_id=org.id
     )
     db.add(user)
     db.commit()

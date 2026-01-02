@@ -1,0 +1,7 @@
+description,amount,unit,category,supplier_name,region,activity_date
+Main office electricity usage,8500,kWh,Electricity,City Power Grid,US,2025-01-15
+Natural gas heating system,350,therms,Heating Fuel,Gas Utility Co,US,2025-01-20
+Delivery fleet diesel fuel,400,gallons,Transportation,Shell Gas Station,US,2025-02-10
+Employee business flights,3500,USD,Business Travel,Delta Airlines,US,2025-02-18
+Office furniture procurement,2800,USD,Procurement,Office Depot,US,2025-03-01
+Company vehicle gasoline,150,gallons,Transportation,BP Gas,US,2025-03-10

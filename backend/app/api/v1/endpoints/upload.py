@@ -70,6 +70,12 @@ def extract_co2e_from_response(result: Dict[str, Any], endpoint_type: str = "aut
     
     # Energy endpoints (electricity, fuel) return direct response, not wrapped in 'estimate'
     if endpoint_type in ["energy", "fuel"]:
+        # First check if response is wrapped in "estimate" (from our service wrapper)
+        if "estimate" in result and isinstance(result["estimate"], dict):
+            estimate = result["estimate"]
+            if "co2e" in estimate and estimate["co2e"] > 0:
+                return float(estimate["co2e"])
+        
         # Electricity endpoint returns location.consumption.co2e
         if "location" in result and "consumption" in result.get("location", {}):
             return float(result["location"]["consumption"].get("co2e", 0))
