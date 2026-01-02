@@ -5,6 +5,7 @@ Handles CSV file uploads, unit normalization, and emission calculations
 
 import io
 import csv
+import hashlib
 import pandas as pd
 from typing import Dict, Any, List, Optional
 from decimal import Decimal
@@ -28,6 +29,31 @@ router = APIRouter()
 
 logger = logging.getLogger(__name__)
 
+
+def compute_activity_hash(project_id: str, description: str, amount: float, unit: str, activity_date: str, region: str = None) -> str:
+    """
+    Compute a unique hash for an activity to prevent duplicates.
+    
+    Note: project_id is accepted but NOT used in hash computation.
+    This enables global deduplication across all projects to prevent
+    the same activity data from inflating totals.
+    
+    Args:
+        project_id: The project this activity belongs to (not used in hash)
+        description: Activity description
+        amount: Activity amount
+        unit: Unit of measurement
+        activity_date: Date of activity
+        region: Optional region
+        
+    Returns:
+        SHA256 hash string
+    """
+    # Normalize values for consistent hashing
+    # Note: project_id deliberately excluded to enable global deduplication
+    hash_input = f"{description.strip().lower()}|{amount}|{unit.lower()}|{activity_date}|{region or ''}"
+    return hashlib.sha256(hash_input.encode()).hexdigest()
+
 def extract_co2e_from_response(result: Dict[str, Any], endpoint_type: str = "autopilot") -> float:
     """
     Extract CO2e from different Climatiq endpoint response structures
@@ -44,6 +70,10 @@ def extract_co2e_from_response(result: Dict[str, Any], endpoint_type: str = "aut
     
     # Energy endpoints (electricity, fuel) return direct response, not wrapped in 'estimate'
     if endpoint_type in ["energy", "fuel"]:
+        # Electricity endpoint returns location.consumption.co2e
+        if "location" in result and "consumption" in result.get("location", {}):
+            return float(result["location"]["consumption"].get("co2e", 0))
+        
         # Direct response from Energy endpoints
         if "co2e" in result:
             return float(result["co2e"])
@@ -265,6 +295,28 @@ async def upload_csv(
                 else:
                     scope = "Scope 3"
                 
+                # Compute content hash for deduplication
+                activity_date_str_for_hash = str(activity_date) if activity_date else ""
+                content_hash = compute_activity_hash(
+                    project_id=str(project.id),
+                    description=description,
+                    amount=amount,
+                    unit=unit,
+                    activity_date=activity_date_str_for_hash,
+                    region=region
+                )
+                
+                # Check if activity already exists (deduplication)
+                existing_activity = db.query(EmissionActivity).filter(
+                    EmissionActivity.content_hash == content_hash
+                ).first()
+                
+                if existing_activity:
+                    print(f"  Skipping duplicate activity: {description[:50]}...")
+                    # Count as successful but don't add again
+                    successful_count += 1
+                    continue
+                
                 # Create activity
                 activity = EmissionActivity(
                     project_id=project.id,
@@ -276,6 +328,7 @@ async def upload_csv(
                     co2e_kg=co2e,
                     region=region,
                     year=str(year),
+                    content_hash=content_hash,  # Add hash for future dedup checks
                     input_data={
                         "description": description,
                         "amount": amount,

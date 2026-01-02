@@ -1,0 +1,16 @@
+description,amount,unit,category,supplier_name,region,activity_date
+Monthly electricity usage from main grid,12500,kWh,Electricity,City Power,US,2024-01-15
+Natural gas for warehouse heating,450,therms,Heating Fuel,Gas Company,US,2024-01-20
+Diesel fuel for delivery truck fleet,850,gallons,Transportation,FuelMart,US,2024-02-10
+Production line electricity,45000,kWh,Manufacturing,City Power,US,2024-02-15
+Round trip flight for conference,2850,miles,Business Travel,Airline123,US,2024-03-05
+Office natural gas heating,220,therms,Heating Fuel,Gas Company,US,2024-03-12
+Employee commute survey data,15000,miles,Employee Commute,,US,2024-04-08
+Data center electricity,28000,kWh,IT Services,City Power,US,2024-04-22
+Generator diesel backup power,320,gallons,Stationary Combustion,FuelDepot,US,2024-05-10
+Rental car for business trip,1200,miles,Business Travel,RentalCar,US,2024-05-18
+Office supplies procurement,2500,USD,Procurement,OfficeDepot,US,2024-06-01
+IT equipment purchase,15000,USD,Procurement,Dell,US,2024-06-15
+Freight shipping domestic,5000,kg,Freight,FedEx,US,2024-07-01
+Company vehicle gasoline,600,gallons,Transportation,Shell,US,2024-07-20
+Steam heating for factory,10000,kWh,Manufacturing,SteamCo,US,2024-08-01

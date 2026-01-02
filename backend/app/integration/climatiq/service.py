@@ -132,6 +132,7 @@ class ClimatiqService:
             
             if co2e > 0:
                 print("DEBUG - Autopilot worked!")
+                autopilot_result["endpoint_type"] = "autopilot"
                 return autopilot_result
             else:
                 print("DEBUG - Autopilot returned 0 CO2e, trying specific endpoint")
@@ -140,9 +141,10 @@ class ClimatiqService:
             print(f"DEBUG - Autopilot failed: {e}, trying specific endpoint")
         
         # Strategy 2: Try specific endpoint based on unit type and description
+        text_lower = text.lower()
         try:
+            # ELECTRICITY: kWh, MWh for electricity usage
             if unit_type == "energy" and unit.lower() in ['kwh', 'mwh', 'gwh', 'wh']:
-                # Use Energy endpoint for electricity - CORRECT PAYLOAD FORMAT
                 energy_payload = {
                     "year": year or datetime.now().year,
                     "region": region or "US",
@@ -152,13 +154,19 @@ class ClimatiqService:
                     }
                 }
                 
-                print(f"DEBUG - Trying Energy endpoint: {energy_payload}")
+                print(f"DEBUG - Trying Electricity endpoint: {energy_payload}")
                 result = await self.client.electricity(energy_payload)
 
-                # Convert to standard format
+                # Electricity returns: location.consumption.co2e OR direct co2e
+                co2e = 0
+                if "location" in result and "consumption" in result["location"]:
+                    co2e = result["location"]["consumption"].get("co2e", 0)
+                elif "co2e" in result:
+                    co2e = result.get("co2e", 0)
+                
                 return {
                     "estimate": {
-                        "co2e": result.get("co2e", 0),
+                        "co2e": co2e,
                         "co2e_unit": "kg",
                         "emission_factor": result.get("emission_factor", {}),
                         "activity_data": {
@@ -168,22 +176,29 @@ class ClimatiqService:
                     },
                     "endpoint_type": "energy"
                 }
+            
+            # FUEL: Diesel, gasoline, petrol, natural gas
+            elif (unit_type == "volume" or unit.lower() in ['gallons', 'gallon', 'gal', 'liters', 'l', 'm3']) and \
+                 any(fuel in text_lower for fuel in ['diesel', 'gasoline', 'petrol', 'fuel', 'generator', 'fleet', 'vehicle']):
                 
-            elif unit_type == "energy" and unit.lower() in ['therms', 'mmbtu', 'btu']:
-                # Use Fuel endpoint for natural gas - CORRECT PAYLOAD FORMAT
-                # Convert therms to liters (1 therm ≈ 29.3 kWh ≈ 105.5 MJ ≈ 2.83 L gasoline equivalent)
-                if unit.lower() in ['therms', 'therm']:
-                    volume_amount = float(amount) * 2.83  # Convert therms to liters
-                    volume_unit = "l"
-                elif unit.lower() in ['mmbtu']:
-                    volume_amount = float(amount) * 28.3  # Convert MMBtu to liters  
+                # Determine fuel type from description - use CORRECT Climatiq fuel_type values
+                if 'diesel' in text_lower:
+                    fuel_type = "diesel"  # Not diesel_100!
+                elif 'gasoline' in text_lower or 'petrol' in text_lower:
+                    fuel_type = "motor_gasoline"  # Not petrol_average!
+                else:
+                    fuel_type = "diesel"  # Default for fleet/generator
+                
+                # Convert gallons to liters (1 gallon = 3.78541 liters)
+                if unit.lower() in ['gallons', 'gallon', 'gal']:
+                    volume_amount = float(amount) * 3.78541
                     volume_unit = "l"
                 else:
                     volume_amount = float(amount)
-                    volume_unit = unit
+                    volume_unit = unit.lower() if unit.lower() in ['l', 'm3'] else 'l'
                 
                 fuel_payload = {
-                    "fuel_type": "natural_gas",
+                    "fuel_type": fuel_type,
                     "amount": {
                         "volume": volume_amount,
                         "volume_unit": volume_unit
@@ -195,9 +210,12 @@ class ClimatiqService:
                 print(f"DEBUG - Trying Fuel endpoint: {fuel_payload}")
                 result = await self.client.fuel(fuel_payload)
 
+                # Fuel returns: combustion.co2e
+                co2e = result.get("combustion", {}).get("co2e", 0)
+                
                 return {
                     "estimate": {
-                        "co2e": result.get("combustion", {}).get("co2e", 0),
+                        "co2e": co2e,
                         "co2e_unit": "kg",
                         "emission_factor": result.get("combustion", {}).get("emission_factor", {}),
                         "activity_data": {
@@ -207,61 +225,96 @@ class ClimatiqService:
                     },
                     "endpoint_type": "fuel"
                 }
+            
+            # NATURAL GAS: therms, MMBtu for heating
+            elif (unit.lower() in ['therms', 'therm', 'mmbtu', 'btu'] or 
+                  any(gas in text_lower for gas in ['natural gas', 'gas heating', 'heating'])):
                 
-            elif unit_type == "money" and ("procurement" in text.lower() or "supplies" in text.lower() or "spending" in text.lower()):
-                # Use Procurement endpoint for spend-based calculations - CORRECT PAYLOAD FORMAT
-                procurement_payload = {
-                    "activity": {
-                        "classification_code": "25",  # Default to manufacturing
-                        "classification_type": "isic4"
+                # Natural gas uses energy units, convert therms to kWh
+                if unit.lower() in ['therms', 'therm']:
+                    energy_amount = float(amount) * 29.3  # 1 therm = 29.3 kWh
+                    energy_unit = "kWh"
+                elif unit.lower() == 'mmbtu':
+                    energy_amount = float(amount) * 293.07  # 1 MMBtu = 293.07 kWh
+                    energy_unit = "kWh"
+                else:
+                    energy_amount = float(amount)
+                    energy_unit = unit
+                
+                fuel_payload = {
+                    "fuel_type": "natural_gas",
+                    "amount": {
+                        "energy": energy_amount,
+                        "energy_unit": energy_unit
                     },
-                    "spend_year": year or datetime.now().year,
-                    "spend_region": region or "US",
-                    "money": float(amount),
-                    "money_unit": unit
-                }
-
-                print(f"DEBUG - Trying Procurement endpoint: {procurement_payload}")
-                result = await self.client.procurement(procurement_payload)
-
-                # Procurement returns estimate object directly
-                return {
-                    "estimate": result.get("estimate", {
-                        "co2e": 0,
-                        "co2e_unit": "kg"
-                    }),
-                    "endpoint_type": "procurement"
+                    "region": region or "US",
+                    "year": year or datetime.now().year
                 }
                 
-            elif unit_type == "distance" and ("travel" in text.lower() or "flight" in text.lower() or "car" in text.lower()):
-                # Use Travel endpoint for distance-based travel
+                print(f"DEBUG - Trying Fuel endpoint (natural gas): {fuel_payload}")
+                result = await self.client.fuel(fuel_payload)
+
+                co2e = result.get("combustion", {}).get("co2e", 0)
+                
+                return {
+                    "estimate": {
+                        "co2e": co2e,
+                        "co2e_unit": "kg",
+                        "emission_factor": result.get("combustion", {}).get("emission_factor", {}),
+                        "activity_data": {
+                            "activity_value": float(amount),
+                            "activity_unit": unit
+                        }
+                    },
+                    "endpoint_type": "fuel"
+                }
+            
+            # TRAVEL SPEND: flights, travel with money units
+            elif unit_type == "money" and any(travel in text_lower for travel in ['flight', 'travel', 'air']):
+                travel_spend_payload = {
+                    "spend_type": "air",
+                    "money": float(amount),
+                    "money_unit": unit.lower(),
+                    "spend_location": {"query": region or "US"},
+                    "spend_year": year or datetime.now().year
+                }
+                
+                print(f"DEBUG - Trying Travel Spend endpoint: {travel_spend_payload}")
+                result = await self.client.travel_spend(travel_spend_payload)
+
+                return {
+                    "estimate": {
+                        "co2e": result.get("co2e", 0),
+                        "co2e_unit": "kg",
+                        "emission_factor": result.get("emission_factor", {}),
+                        "activity_data": {
+                            "activity_value": float(amount),
+                            "activity_unit": unit
+                        }
+                    },
+                    "endpoint_type": "travel_spend"
+                }
+            
+            # TRAVEL DISTANCE: miles, km for car travel, commute
+            elif unit_type == "distance" or unit.lower() in ['miles', 'mile', 'km', 'kilometers']:
+                travel_mode = "car"  # Default
+                if any(air in text_lower for air in ['flight', 'fly', 'air']):
+                    travel_mode = "air"
+                elif any(rail in text_lower for rail in ['train', 'rail']):
+                    travel_mode = "rail"
+                
                 travel_payload = {
                     "origin": {"query": region or "US"},
-                    "destination": {"query": region or "US"},  # Simple fallback
-                    "travel_mode": "car" if "car" in text.lower() else "air"
+                    "destination": {"query": region or "US"},
+                    "travel_mode": travel_mode
                 }
                 
-                # Add car details if it's a car trip
-                if "car" in text.lower():
-                    travel_payload["car_details"] = {
-                        "car_type": "average"
-                    }
+                if travel_mode == "car":
+                    travel_payload["car_details"] = {"car_type": "average"}
                 
-                # For flights, use spend-based if amount is money
-                if unit_type == "money" and "flight" in text.lower():
-                    travel_payload = {
-                        "spend_type": "air",
-                        "money": float(amount),
-                        "money_unit": unit,
-                        "spend_location": {"query": region or "US"},
-                        "spend_year": year or datetime.now().year
-                    }
-                    print(f"DEBUG - Trying Travel spend endpoint: {travel_payload}")
-                    result = await self.client.travel_spend(travel_payload)
-                else:
-                    print(f"DEBUG - Trying Travel distance endpoint: {travel_payload}")
-                    result = await self.client.travel_distance(travel_payload)
-                
+                print(f"DEBUG - Trying Travel Distance endpoint: {travel_payload}")
+                result = await self.client.travel_distance(travel_payload)
+
                 return {
                     "estimate": {
                         "co2e": result.get("co2e", 0),
@@ -273,6 +326,38 @@ class ClimatiqService:
                         }
                     },
                     "endpoint_type": "travel"
+                }
+            
+            # PROCUREMENT: spending on supplies, equipment, services
+            elif unit_type == "money":
+                procurement_payload = {
+                    "activity": {
+                        "classification_code": "25",  # Default to manufacturing
+                        "classification_type": "isic4"
+                    },
+                    "spend_year": year or datetime.now().year,
+                    "spend_region": region or "US",
+                    "money": float(amount),
+                    "money_unit": unit.lower()
+                }
+
+                print(f"DEBUG - Trying Procurement endpoint: {procurement_payload}")
+                result = await self.client.procurement(procurement_payload)
+
+                # Procurement returns: estimate.co2e
+                co2e = result.get("estimate", {}).get("co2e", 0)
+                
+                return {
+                    "estimate": {
+                        "co2e": co2e,
+                        "co2e_unit": "kg",
+                        "emission_factor": result.get("estimate", {}).get("emission_factor", {}),
+                        "activity_data": {
+                            "activity_value": float(amount),
+                            "activity_unit": unit
+                        }
+                    },
+                    "endpoint_type": "procurement"
                 }
                 
         except Exception as e:

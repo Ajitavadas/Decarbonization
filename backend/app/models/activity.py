@@ -55,6 +55,7 @@ class EmissionActivity(Base):
     
     # Additional metadata
     description = Column(String(500), nullable=True)
+    content_hash = Column(String(64), nullable=True, unique=True, index=True)  # SHA256 hash for deduplication
     tags = Column(JSONB, default=[])  # ["business-travel", "client-meeting"]
     
     # Relationships
