@@ -43,8 +43,8 @@ services:
     environment:
       - DATABASE_URL=postgresql://carbon_user:carbon_password@postgres:5432/decarbonization_db
       - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     volumes:
       - ./backend:/app
     ports:
@@ -54,6 +54,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   # Celery Worker
@@ -67,8 +73,8 @@ services:
     environment:
       - DATABASE_URL=postgresql://carbon_user:carbon_password@postgres:5432/decarbonization_db
       - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     volumes:
       - ./backend:/app
     depends_on:
@@ -76,47 +82,38 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.core.celery_app inspect ping -d celery@$$HOSTNAME"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     command: celery -A app.core.celery_app worker --loglevel=info --concurrency=4
 
-  # Celery Beat Scheduler
-  celery-beat:
+  # Next.js Frontend
+  frontend:
     build:
-      context: ./backend
+      context: ./frontend
       dockerfile: Dockerfile
-    container_name: decarbonization-celery-beat
-    env_file:
-      - ./backend/.env
+    container_name: decarbonization-frontend
     environment:
-      - DATABASE_URL=postgresql://carbon_user:carbon_password@postgres:5432/decarbonization_db
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
     volumes:
-      - ./backend:/app
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - "3000:3000"
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    command: celery -A app.core.celery_app beat --loglevel=info
-
-  # Next.js Frontend (Not yet implemented)
-  # frontend:
-  #   build:
-  #     context: ./frontend
-  #     dockerfile: Dockerfile
-  #   container_name: decarbonization-frontend
-  #   environment:
-  #     - NEXT_PUBLIC_API_URL=http://localhost:8000
-  #   volumes:
-  #     - ./frontend:/app
-  #     - /app/node_modules
-  #     - /app/.next
-  #   ports:
-  #     - "3000:3000"
-  #   depends_on:
-  #     - backend
-  #   command: npm run dev
+      backend:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    command: npm run dev
 
 volumes:
   postgres_data:

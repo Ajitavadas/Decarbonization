@@ -23,7 +23,25 @@ async def create_project(
     current_user: User = Depends(get_current_user)
 ):
     """Create new reporting project"""
-    project = Project(**project_in.dict())
+    # Ensure user has an organization
+    if not current_user.organization_id:
+        from app.models.organization import Organization
+        # Create default organization
+        org = Organization(
+            name=f"{current_user.full_name or current_user.email}'s Organization",
+            is_active=True
+        )
+        db.add(org)
+        db.commit()
+        db.refresh(org)
+        current_user.organization_id = org.id
+        db.commit()
+    
+    # Use current user's organization_id (override if provided in request)
+    project_data = project_in.dict()
+    project_data["organization_id"] = current_user.organization_id
+    
+    project = Project(**project_data)
     db.add(project)
     db.commit()
     db.refresh(project)

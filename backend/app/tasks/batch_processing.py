@@ -11,7 +11,6 @@ from app.core.celery_app import celery_app
 from app.db.session import SessionLocal
 from app.models.batch_job import BatchJob
 from app.models.activity import EmissionActivity
-from app.services.calculation_engine import calculation_engine
 
 
 @celery_app.task(bind=True, name="app.tasks.batch_processing.process_batch_estimates")
@@ -42,16 +41,17 @@ def process_batch_estimates(self, job_id: str, project_id: str, estimates: List[
         
         for idx, estimate in enumerate(estimates):
             try:
-                # Calculate emission (async function called synchronously in worker)
+                # Calculate emission using Climatiq service directly
                 import asyncio
-                result = asyncio.run(calculation_engine.calculate_emission(
-                    activity_type=estimate.get("activity_type", "unknown"),
-                    activity_id=estimate["activity_id"],
-                    parameters=estimate["parameters"],
-                    region=estimate.get("region"),
-                    year=estimate.get("year"),
-                    sub_type=estimate.get("sub_type"),
-                    use_cache=False  # Skip cache for batch operations
+                from app.integration.climatiq.service import ClimatiqService
+                climatiq_service = ClimatiqService()
+                
+                result = asyncio.run(climatiq_service.calculate_autopilot(
+                    text=estimate.get("description", ""),
+                    amount=estimate["parameters"].get("amount", 0),
+                    unit=estimate["parameters"].get("unit", "kWh"),
+                    region=estimate.get("region", "US"),
+                    year=estimate.get("year", 2024)
                 ))
                 
                 # Save activity

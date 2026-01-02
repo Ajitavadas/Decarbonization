@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     CLIMATIQ_BASE_URL: str = "https://api.climatiq.io"
     CLIMATIQ_PREVIEW_URL: str = "https://preview.api.climatiq.io"
     CLIMATIQ_DATA_VERSION: str = "^28"  # Use latest 28.x version
+
+    # AI API
+    MISTRAL_API_KEY: str = Field(..., description="Mistral AI API key")
+    AI_MIN_CONFIDENCE_THRESHOLD: float = 0.7  # Minimum confidence for auto-approval
     
     # Database
     DATABASE_URL: str = Field(..., description="PostgreSQL connection string")
@@ -35,7 +39,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
     # CORS
-    ALLOWED_ORIGINS: Union[str, List[str]] = "http://localhost:3000,http://127.0.0.1:3000"
+    ALLOWED_ORIGINS: Union[str, List[str]] = "http://localhost:3000,http://127.0.0.1:3000,http://frontend:3000"
     
     @field_validator("ALLOWED_ORIGINS", mode="before")
     @classmethod

@@ -79,7 +79,7 @@ class ProjectBase(BaseModel):
 
 
 class ProjectCreate(ProjectBase):
-    organization_id: UUID4
+    organization_id: Optional[UUID4] = None  # Auto-set from current user if not provided
 
 
 class ProjectResponse(ProjectBase):
@@ -161,123 +161,6 @@ class BatchEstimateResponseSchema(ResponseBase):
     job_id: UUID4
     status: str
     total_records: int
-
-
-# ========== Travel Schemas ==========
-
-class TravelDistanceRequest(BaseModel):
-    """Distance-based travel request"""
-    origin: str
-    destination: str
-    travel_mode: str = Field(..., description="air, car, rail, bus")
-    cabin_class: Optional[str] = "economy"  # For air travel
-    year: Optional[int] = 2024
-    project_id: Optional[UUID4] = None
-    activity_date: Optional[datetime] = None
-
-
-class TravelSpendRequest(BaseModel):
-    """Spend-based travel request"""
-    spend_type: str = Field(..., description="hotel, car_rental, rail, air")
-    amount: Decimal
-    currency: str = Field(..., description="usd, eur, gbp")
-    spend_year: int = Field(..., description="Year for inflation adjustment")
-    location: Optional[str] = None
-    project_id: Optional[UUID4] = None
-    activity_date: Optional[datetime] = None
-
-
-# ========== Energy Schemas ==========
-
-class ElectricityCalculationRequest(BaseModel):
-    """Electricity calculation request"""
-    energy_kwh: Decimal
-    region: str = Field(..., description="Grid region code (required)")
-    year: Optional[int] = 2024
-    renewable_credits: Optional[Decimal] = None
-    project_id: Optional[UUID4] = None
-    activity_date: Optional[datetime] = None
-
-
-class FuelCalculationRequest(BaseModel):
-    """Fuel combustion calculation request"""
-    fuel_type: str = Field(..., description="natural_gas, diesel, coal, gasoline, biodiesel_bio_100, ethanol, cng, etc.")
-    amount: Decimal
-    unit: str = Field(..., description="l, kg, t, gal, m3, kWh, MJ")
-    unit_type: str = Field("volume", description="volume, weight, or energy")
-    region: Optional[str] = Field(None, description="2-letter ISO country code")
-    year: Optional[int] = None
-    project_id: Optional[UUID4] = None
-    activity_date: Optional[datetime] = None
-
-
-# ========== Freight Schemas ==========
-
-class FreightLegRequest(BaseModel):
-    """Single freight leg (for multi-leg routes)"""
-    location: str = Field(..., description="Query, IATA, UN-LOCODE, or lat,lon coordinates")
-    transport_mode: Optional[str] = Field(None, description="road, air, sea, rail - omit for final destination")
-
-
-class FreightCalculationRequest(BaseModel):
-    """Intermodal freight calculation request"""
-    origin: str = Field(..., description="Start location")
-    destination: str = Field(..., description="End location")
-    transport_mode: str = Field(..., description="road, air, sea, rail")
-    cargo_weight: Decimal
-    weight_unit: str = Field("kg", description="kg, t, lb, ton")
-    project_id: Optional[UUID4] = None
-    activity_date: Optional[datetime] = None
-
-
-class MultiLegFreightRequest(BaseModel):
-    """Multi-leg intermodal freight calculation"""
-    route: List[FreightLegRequest]
-    cargo_weight: Decimal
-    weight_unit: str = Field("kg", description="kg, t, lb, ton")
-    project_id: Optional[UUID4] = None
-    activity_date: Optional[datetime] = None
-
-
-# ========== Procurement Schemas ==========
-
-class ProcurementCalculationRequest(BaseModel):
-    """Spend-based procurement calculation request"""
-    amount: Decimal
-    currency: str = Field(..., description="eur, usd, gbp, etc.")
-    classification_code: str = Field(..., description="Industry/category code")
-    classification_type: str = Field("mcc", description="mcc, unspsc, isic4, nace2")
-    region: Optional[str] = Field(None, description="Supplier country (2-letter ISO)")
-    spend_year: Optional[int] = Field(None, description="Year for inflation adjustment")
-    project_id: Optional[UUID4] = None
-    activity_date: Optional[datetime] = None
-
-
-# ========== Autopilot Schemas ==========
-# NOTE: Autopilot is an ADD-ON feature that requires explicit opt-in from Climatiq.
-
-class AutopilotSuggestRequestSchema(BaseModel):
-    """Autopilot suggestion request (v1-preview4)"""
-    text: str = Field(..., description="Natural language activity description")
-    max_suggestions: int = Field(5, ge=1, le=20)
-    unit_type: Optional[List[str]] = Field(None, description="Filter: Money, Weight, Volume, Energy, Number")
-    region: Optional[str] = None
-    year: Optional[int] = None
-    source: Optional[List[str]] = Field(None, description="Filter by data sources: EPA, BEIS, Ecoinvent, etc.")
-    scope: Optional[List[str]] = Field(None, description="Filter by scope: 1, 2, 3, 3.1, 3.2, etc.")
-
-
-class AutopilotEstimateRequestSchema(BaseModel):
-    """Autopilot one-shot estimate (v1-preview4)"""
-    text: str = Field(..., description="Natural language activity description")
-    amount: Decimal
-    unit: str = Field(..., description="Unit: eur, usd, kg, t, kWh, etc.")
-    unit_type: str = Field("money", description="money, weight, volume, or energy")
-    region: Optional[str] = None
-    year: Optional[int] = None
-    scope: Optional[List[str]] = Field(None, description="Filter by scope: 1, 2, 3")
-    project_id: Optional[UUID4] = None
-    activity_date: Optional[datetime] = None
 
 
 # ========== Custom Mapping Schemas ==========

@@ -88,7 +88,9 @@ class ClimatiqClient:
                     raise ValueError(f"Unsupported HTTP method: {method}")
                 
                 response.raise_for_status()
-                return response.json()
+                result = response.json()
+                print(f"DEBUG CLIMATIQ CLIENT - Response: {result}")
+                return result
                 
             except httpx.HTTPStatusError as e:
                 error_detail = e.response.text

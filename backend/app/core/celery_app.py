@@ -13,9 +13,7 @@ celery_app = Celery(
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
     include=[
-        "app.tasks.batch_processing",
-        "app.tasks.reporting",
-        "app.tasks.synchronization"
+        "app.tasks.batch_processing"
     ]
 )
 
@@ -33,17 +31,7 @@ celery_app.conf.update(
     worker_max_tasks_per_child=1000,
 )
 
-# Periodic tasks schedule
-celery_app.conf.beat_schedule = {
-    "sync-emission-factors-nightly": {
-        "task": "app.tasks.synchronization.sync_emission_factors",
-        "schedule": crontab(hour=2, minute=0),  # 2 AM daily
-    },
-    "generate-monthly-reports": {
-        "task": "app.tasks.reporting.generate_monthly_reports",
-        "schedule": crontab(day_of_month=1, hour=0, minute=0),  # 1st of month
-    },
-}
+# No periodic tasks needed for core workflow
 
 
 @celery_app.task(bind=True)
