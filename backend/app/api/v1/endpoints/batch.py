@@ -10,8 +10,10 @@ from typing import List
 from app.db.session import get_db
 from app.models.user import User
 from app.models.batch_job import BatchJob
+from app.models.project import Project
 from app.schemas import BatchJobResponse
 from app.core.security import get_current_user
+from app.core.authorization import verify_batch_job_access
 
 router = APIRouter()
 
@@ -24,8 +26,15 @@ async def list_batch_jobs(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """List batch jobs"""
-    query = db.query(BatchJob)
+    """List batch jobs for user's organization"""
+    # Get project IDs that belong to user's organization
+    org_project_ids = db.query(Project.id).filter(
+        Project.organization_id == current_user.organization_id
+    ).subquery()
+    
+    query = db.query(BatchJob).filter(
+        BatchJob.project_id.in_(org_project_ids)
+    )
     
     if status:
         query = query.filter(BatchJob.status == status)
@@ -45,10 +54,8 @@ async def get_batch_job_status(
     
     Use for polling job progress during async processing
     """
-    job = db.query(BatchJob).filter(BatchJob.id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    
+    # verify_batch_job_access checks both existence AND organization ownership
+    job = verify_batch_job_access(db, job_id, current_user)
     return job
 
 
@@ -59,9 +66,8 @@ async def cancel_batch_job(
     current_user: User = Depends(get_current_user)
 ):
     """Cancel a batch job (if still queued or processing)"""
-    job = db.query(BatchJob).filter(BatchJob.id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    # verify_batch_job_access checks both existence AND organization ownership
+    job = verify_batch_job_access(db, job_id, current_user)
     
     if job.status in ["completed", "failed"]:
         raise HTTPException(

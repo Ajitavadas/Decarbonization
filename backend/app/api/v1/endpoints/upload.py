@@ -22,6 +22,7 @@ from app.models.batch_job import BatchJob
 from app.services.unit_normalizer import UnitNormalizer
 from app.services.ai_classifier_service import AIScopeClassifierService
 from app.integration.climatiq.service import ClimatiqService
+from app.core.authorization import verify_project_access
 from app.db.session import get_db
 import logging
 
@@ -32,14 +33,14 @@ logger = logging.getLogger(__name__)
 
 def compute_activity_hash(project_id: str, description: str, amount: float, unit: str, activity_date: str, region: str = None) -> str:
     """
-    Compute a unique hash for an activity to prevent duplicates.
+    Compute a unique hash for an activity to prevent duplicates within a project.
     
-    Note: project_id is accepted but NOT used in hash computation.
-    This enables global deduplication across all projects to prevent
-    the same activity data from inflating totals.
+    Note: project_id IS included in hash computation to scope deduplication
+    per-project (and thus per-organization). Different organizations can have
+    the same activity data without triggering cross-org deduplication.
     
     Args:
-        project_id: The project this activity belongs to (not used in hash)
+        project_id: The project this activity belongs to (INCLUDED in hash)
         description: Activity description
         amount: Activity amount
         unit: Unit of measurement
@@ -50,8 +51,8 @@ def compute_activity_hash(project_id: str, description: str, amount: float, unit
         SHA256 hash string
     """
     # Normalize values for consistent hashing
-    # Note: project_id deliberately excluded to enable global deduplication
-    hash_input = f"{description.strip().lower()}|{amount}|{unit.lower()}|{activity_date}|{region or ''}"
+    # project_id included to scope deduplication per-project/organization
+    hash_input = f"{project_id}|{description.strip().lower()}|{amount}|{unit.lower()}|{activity_date}|{region or ''}"
     return hashlib.sha256(hash_input.encode()).hexdigest()
 
 def extract_co2e_from_response(result: Dict[str, Any], endpoint_type: str = "autopilot") -> float:
@@ -128,8 +129,8 @@ def extract_co2e_from_response(result: Dict[str, Any], endpoint_type: str = "aut
         elif "estimate" in result and "co2e" in result["estimate"]:
             return float(result["estimate"]["co2e"])
     
-    # Autopilot and Estimate endpoints
-    elif endpoint_type in ["autopilot", "estimate"]:
+    # Autopilot and Estimate endpoints (including estimate_natural_gas, estimate_flight)
+    elif endpoint_type in ["autopilot", "estimate", "estimate_natural_gas", "fuel_natural_gas", "estimate_flight"]:
         if "estimate" not in result:
             return 0.0
             
@@ -154,6 +155,35 @@ def extract_co2e_from_response(result: Dict[str, Any], endpoint_type: str = "aut
             if key in estimate and isinstance(estimate[key], dict) and "co2e" in estimate[key]:
                 return float(estimate[key]["co2e"])
     
+    # UNIVERSAL FALLBACK: Try all possible CO2e locations for any endpoint type
+    # This ensures new endpoint types don't fail silently
+    else:
+        # 1. Direct co2e at root
+        if "co2e" in result and result["co2e"] and result["co2e"] > 0:
+            return float(result["co2e"])
+        
+        # 2. Nested in "estimate" object
+        if "estimate" in result and isinstance(result["estimate"], dict):
+            est = result["estimate"]
+            if "co2e" in est and est["co2e"] and est["co2e"] > 0:
+                return float(est["co2e"])
+        
+        # 3. Nested in "combustion" 
+        if "combustion" in result and isinstance(result["combustion"], dict):
+            comb = result["combustion"]
+            if "co2e" in comb and comb["co2e"] and comb["co2e"] > 0:
+                return float(comb["co2e"])
+        
+        # 4. Check all known nested keys
+        for key in ["location", "direct", "market", "well_to_tank", "consumption"]:
+            if key in result and isinstance(result[key], dict):
+                nested = result[key]
+                if "co2e" in nested and nested["co2e"] and nested["co2e"] > 0:
+                    return float(nested["co2e"])
+                if "consumption" in nested and isinstance(nested["consumption"], dict):
+                    if "co2e" in nested["consumption"] and nested["consumption"]["co2e"] > 0:
+                        return float(nested["consumption"]["co2e"])
+    
     return 0.0
 
 
@@ -168,10 +198,8 @@ async def upload_csv(
     Upload and process CSV file for emission calculations
     """
     try:
-        # Validate project
-        project = db.query(Project).filter(Project.id == project_id).first()
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
+        # Validate project AND verify ownership
+        project = verify_project_access(db, project_id, current_user)
         
         # Read CSV file
         contents = await file.read()
@@ -418,9 +446,8 @@ async def get_batch_jobs(
     """
     Get batch jobs for a project
     """
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    # Verify project ownership
+    project = verify_project_access(db, project_id, current_user)
     
     jobs = db.query(BatchJob).filter(
         BatchJob.project_id == project.id

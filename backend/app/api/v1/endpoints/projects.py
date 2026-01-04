@@ -12,6 +12,7 @@ from app.models.user import User
 from app.models.project import Project
 from app.schemas import ProjectCreate, ProjectResponse
 from app.core.security import get_current_user
+from app.core.authorization import verify_project_access
 
 router = APIRouter()
 
@@ -73,7 +74,6 @@ async def get_project(
     current_user: User = Depends(get_current_user)
 ):
     """Get specific project"""
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    # verify_project_access checks both existence AND organization ownership
+    project = verify_project_access(db, project_id, current_user)
     return project

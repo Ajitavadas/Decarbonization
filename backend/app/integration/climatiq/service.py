@@ -90,61 +90,150 @@ class ClimatiqService:
         """
         print(f"DEBUG - Smart calculation for: {text} ({amount} {unit})")
         
-        # Strategy 1: Try Autopilot first (most flexible)
-        try:
-            autopilot_payload = {
-                "text": text
-            }
-
-            if amount is not None and unit:
-                if unit_type == "money":
-                    autopilot_payload["parameters"] = {
-                        "money": float(amount),
-                        "money_unit": unit
-                    }
-                elif unit_type == "energy":
-                    autopilot_payload["parameters"] = {
-                        "energy": float(amount),
-                        "energy_unit": unit
-                    }
-                elif unit_type == "weight":
-                    autopilot_payload["parameters"] = {
-                        "weight": float(amount),
-                        "weight_unit": unit
-                    }
-                elif unit_type == "distance":
-                    autopilot_payload["parameters"] = {
-                        "distance": float(amount),
-                        "distance_unit": unit
-                    }
-                elif unit_type == "volume":
-                    autopilot_payload["parameters"] = {
-                        "volume": float(amount),
-                        "volume_unit": unit
-                    }
-            
-            print(f"DEBUG - Trying Autopilot with: {autopilot_payload}")
-            autopilot_result = await self.client.autopilot_estimate(autopilot_payload)
-            
-            # Check if we got a valid result with CO2e > 0
-            estimate = autopilot_result.get("estimate", {})
-            co2e = estimate.get("co2e", 0)
-            
-            if co2e > 0:
-                print("DEBUG - Autopilot worked!")
-                autopilot_result["endpoint_type"] = "autopilot"
-                return autopilot_result
-            else:
-                print("DEBUG - Autopilot returned 0 CO2e, trying specific endpoint")
+        text_lower = text.lower()
+        
+        # Skip Autopilot for activities that benefit from direct endpoint calculation:
+        # - Flights/travel (Autopilot often misclassifies to wrong vehicle types)
+        # - Natural gas/heating (Autopilot may use wrong emission factors)
+        skip_autopilot = (
+            any(air in text_lower for air in ['flight', 'fly', 'air', 'plane']) or
+            any(gas in text_lower for gas in ['natural gas', 'heating', 'furnace', 'boiler']) or
+            unit.lower() in ['therms', 'therm', 'mmbtu', 'btu']
+        )
+        
+        # Strategy 1: Try Autopilot first (most flexible) - unless we should skip it
+        if not skip_autopilot:
+            try:
+                autopilot_payload = {
+                    "text": text
+                }
                 
-        except Exception as e:
-            print(f"DEBUG - Autopilot failed: {e}, trying specific endpoint")
+                # CRITICAL: Include region and year in Autopilot request
+                # Without this, Climatiq may use wrong country's emission factors
+                if region:
+                    autopilot_payload["region"] = region
+                if year:
+                    autopilot_payload["year"] = year
+
+                if amount is not None and unit:
+                    if unit_type == "money":
+                        autopilot_payload["parameters"] = {
+                            "money": float(amount),
+                            "money_unit": unit
+                        }
+                    elif unit_type == "energy":
+                        autopilot_payload["parameters"] = {
+                            "energy": float(amount),
+                            "energy_unit": unit
+                        }
+                    elif unit_type == "weight":
+                        autopilot_payload["parameters"] = {
+                            "weight": float(amount),
+                            "weight_unit": unit
+                        }
+                    elif unit_type == "distance":
+                        autopilot_payload["parameters"] = {
+                            "distance": float(amount),
+                            "distance_unit": unit
+                        }
+                    elif unit_type == "volume":
+                        autopilot_payload["parameters"] = {
+                            "volume": float(amount),
+                            "volume_unit": unit
+                        }
+                
+                print(f"DEBUG - Trying Autopilot with: {autopilot_payload}")
+                autopilot_result = await self.client.autopilot_estimate(autopilot_payload)
+                
+                # Check if we got a valid result with CO2e > 0
+                estimate = autopilot_result.get("estimate", {})
+                co2e = estimate.get("co2e", 0)
+                
+                # VALIDATION: Check if Autopilot used the correct region
+                if co2e > 0 and region:
+                    emission_factor = estimate.get("emission_factor", {})
+                    used_region = emission_factor.get("region", "")
+                    
+                    # Check if region matches (allow partial match, e.g., "US" in "US-CA")
+                    region_ok = (
+                        used_region.upper() == region.upper() or
+                        used_region.upper().startswith(region.upper() + "-") or
+                        region.upper().startswith(used_region.upper() + "-")
+                    )
+                    
+                    if not region_ok:
+                        print(f"DEBUG - Autopilot used wrong region: requested={region}, got={used_region}. Falling back.")
+                    else:
+                        print(f"DEBUG - Autopilot worked with correct region: {used_region}")
+                        autopilot_result["endpoint_type"] = "autopilot"
+                        return autopilot_result
+                elif co2e > 0:
+                    print("DEBUG - Autopilot worked!")
+                    autopilot_result["endpoint_type"] = "autopilot"
+                    return autopilot_result
+                else:
+                    print("DEBUG - Autopilot returned 0 CO2e, trying specific endpoint")
+                    
+            except Exception as e:
+                print(f"DEBUG - Autopilot failed: {e}, trying specific endpoint")
+        else:
+            print(f"DEBUG - Skipping Autopilot for: {text[:50]}... (using direct endpoint)")
         
         # Strategy 2: Try specific endpoint based on unit type and description
         text_lower = text.lower()
+        
+        # Check if this is natural gas/heating (even if unit is kWh after conversion)
+        is_gas_heating = any(gas in text_lower for gas in [
+            'natural gas', 'gas heating', 'heating', 'furnace', 'boiler', 'therms'
+        ])
+        
         try:
-            # ELECTRICITY: kWh, MWh for electricity usage
-            if unit_type == "energy" and unit.lower() in ['kwh', 'mwh', 'gwh', 'wh']:
+            # NATURAL GAS / HEATING: Use Estimate endpoint with natural gas activity_id
+            if is_gas_heating or unit.lower() in ['therms', 'therm', 'mmbtu', 'btu']:
+                # Convert to kWh if needed
+                if unit.lower() in ['therms', 'therm']:
+                    energy_amount = float(amount) * 29.3  # 1 therm = 29.3 kWh
+                    energy_unit = "kWh"
+                elif unit.lower() == 'mmbtu':
+                    energy_amount = float(amount) * 293.07  # 1 MMBtu = 293.07 kWh
+                    energy_unit = "kWh"
+                else:
+                    energy_amount = float(amount)
+                    energy_unit = unit if unit.lower() in ['kwh', 'mwh'] else 'kWh'
+                
+                # Use Estimate endpoint with direct activity_id for natural gas
+                estimate_payload = {
+                    "emission_factor": {
+                        "activity_id": "fuel-type_natural_gas-fuel_use_stationary",
+                        "region": region or "US",
+                        "data_version": "^20"
+                    },
+                    "parameters": {
+                        "energy": energy_amount,
+                        "energy_unit": energy_unit
+                    }
+                }
+                
+                print(f"DEBUG - Trying Estimate endpoint (natural gas): {estimate_payload}")
+                result = await self.client.estimate(estimate_payload)
+
+                co2e = result.get("co2e", 0)
+                
+                return {
+                    "estimate": {
+                        "co2e": co2e,
+                        "co2e_unit": "kg",
+                        "emission_factor": result.get("emission_factor", {}),
+                        "activity_data": result.get("activity_data", {
+                            "activity_value": float(amount),
+                            "activity_unit": unit
+                        })
+                    },
+                    "endpoint_type": "estimate_natural_gas"
+                }
+            
+            # ELECTRICITY: kWh, MWh for electricity usage (NOT heating)
+            elif unit_type == "energy" and unit.lower() in ['kwh', 'mwh', 'gwh', 'wh']:
                 energy_payload = {
                     "year": year or datetime.now().year,
                     "region": region or "US",
@@ -299,15 +388,57 @@ class ClimatiqService:
             # Use Estimate endpoint with distance-based emission factors
             elif unit_type == "distance" or unit.lower() in ['miles', 'mile', 'mi', 'km', 'kilometers', 'kilometre']:
                 # Determine emission factor based on activity type
-                if any(air in text_lower for air in ['flight', 'fly', 'air', 'plane']):
-                    # Use flight emission factor
-                    activity_id = "passenger_flight-route_type_domestic-aircraft_type_na-distance_na-class_na-rf_included"
+                is_flight = any(air in text_lower for air in ['flight', 'fly', 'air', 'plane'])
+                
+                if is_flight:
+                    # Flights use PassengerOverDistance unit type (passenger-km)
+                    # BEIS provides best flight factors (GB region)
+                    activity_id = "passenger_flight-route_type_domestic-aircraft_type_na-distance_na-class_na-rf_included-distance_uplift_included"
+                    
+                    # Convert miles to km if needed
+                    if unit.lower() in ['miles', 'mile', 'mi']:
+                        distance_km = float(amount) * 1.60934
+                    else:
+                        distance_km = float(amount)
+                    
+                    estimate_payload = {
+                        "emission_factor": {
+                            "activity_id": activity_id,
+                            "region": "GB",  # BEIS factors for flights
+                            "data_version": "^20"
+                        },
+                        "parameters": {
+                            "passengers": 1,  # Assuming 1 passenger per business trip
+                            "distance": distance_km,
+                            "distance_unit": "km"
+                        }
+                    }
+                    
+                    print(f"DEBUG - Trying Estimate endpoint for FLIGHT: {estimate_payload}")
+                    result = await self.client.estimate(estimate_payload)
+                    
+                    co2e = result.get("co2e", 0)
+                    
+                    return {
+                        "estimate": {
+                            "co2e": co2e,
+                            "co2e_unit": "kg",
+                            "emission_factor": result.get("emission_factor", {}),
+                            "activity_data": result.get("activity_data", {
+                                "activity_value": float(amount),
+                                "activity_unit": unit
+                            })
+                        },
+                        "endpoint_type": "estimate_flight"
+                    }
+                
                 elif any(rail in text_lower for rail in ['train', 'rail']):
                     activity_id = "passenger_train-route_type_intercity-fuel_source_na"
                 else:
                     # Default to car for commute, rental car, business travel
                     activity_id = "passenger_vehicle-vehicle_type_car-fuel_source_na-engine_size_na-vehicle_age_na-vehicle_weight_na"
                 
+                # For non-flight travel: car/train
                 # Normalize distance unit to Climatiq format
                 distance_unit_map = {
                     'miles': 'mi',

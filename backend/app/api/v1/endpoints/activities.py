@@ -13,6 +13,7 @@ from app.models.user import User
 from app.schemas import ActivityResponse, ActivitySummary, PaginatedResponse
 from app.crud.crud_activity import crud_activity
 from app.core.security import get_current_user
+from app.core.authorization import verify_project_access, verify_activity_access
 
 router = APIRouter()
 
@@ -32,6 +33,9 @@ async def list_activities(
     
     Optional filters: scope, activity_type
     """
+    # Verify user has access to this project
+    verify_project_access(db, project_id, current_user)
+    
     if scope:
         activities = crud_activity.get_by_scope(db, project_id=project_id, scope=scope)
     else:
@@ -56,9 +60,8 @@ async def get_activity(
     current_user: User = Depends(get_current_user)
 ):
     """Get specific activity details"""
-    activity = crud_activity.get(db, id=activity_id)
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
+    # verify_activity_access checks both existence AND organization ownership
+    activity = verify_activity_access(db, activity_id, current_user)
     return activity
 
 
@@ -77,6 +80,9 @@ async def get_project_summary(
     - Breakdown by activity type
     - Total number of activities
     """
+    # Verify user has access to this project
+    verify_project_access(db, project_id, current_user)
+    
     total_emissions = crud_activity.get_total_emissions(db, project_id=project_id)
     scope_breakdown = crud_activity.get_emissions_by_scope(db, project_id=project_id)
     activity_breakdown = crud_activity.get_emissions_by_activity_type(db, project_id=project_id)
@@ -97,9 +103,8 @@ async def delete_activity(
     current_user: User = Depends(get_current_user)
 ):
     """Delete an activity"""
-    activity = crud_activity.get(db, id=activity_id)
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
+    # verify_activity_access checks both existence AND organization ownership
+    verify_activity_access(db, activity_id, current_user)
     
     crud_activity.delete(db, id=activity_id)
     return {"success": True, "message": "Activity deleted"}
