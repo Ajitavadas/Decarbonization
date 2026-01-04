@@ -295,37 +295,60 @@ class ClimatiqService:
                     "endpoint_type": "travel_spend"
                 }
             
-            # TRAVEL DISTANCE: miles, km for car travel, commute
-            elif unit_type == "distance" or unit.lower() in ['miles', 'mile', 'km', 'kilometers']:
-                travel_mode = "car"  # Default
-                if any(air in text_lower for air in ['flight', 'fly', 'air']):
-                    travel_mode = "air"
+            # TRAVEL DISTANCE: miles, km for car travel, commute, flights
+            # Use Estimate endpoint with distance-based emission factors
+            elif unit_type == "distance" or unit.lower() in ['miles', 'mile', 'mi', 'km', 'kilometers', 'kilometre']:
+                # Determine emission factor based on activity type
+                if any(air in text_lower for air in ['flight', 'fly', 'air', 'plane']):
+                    # Use flight emission factor
+                    activity_id = "passenger_flight-route_type_domestic-aircraft_type_na-distance_na-class_na-rf_included"
                 elif any(rail in text_lower for rail in ['train', 'rail']):
-                    travel_mode = "rail"
+                    activity_id = "passenger_train-route_type_intercity-fuel_source_na"
+                else:
+                    # Default to car for commute, rental car, business travel
+                    activity_id = "passenger_vehicle-vehicle_type_car-fuel_source_na-engine_size_na-vehicle_age_na-vehicle_weight_na"
                 
-                travel_payload = {
-                    "origin": {"query": region or "US"},
-                    "destination": {"query": region or "US"},
-                    "travel_mode": travel_mode
+                # Normalize distance unit to Climatiq format
+                distance_unit_map = {
+                    'miles': 'mi',
+                    'mile': 'mi', 
+                    'mi': 'mi',
+                    'km': 'km',
+                    'kilometers': 'km',
+                    'kilometre': 'km',
+                    'kilometer': 'km'
+                }
+                normalized_unit = distance_unit_map.get(unit.lower(), 'mi')
+                
+                estimate_payload = {
+                    "emission_factor": {
+                        "activity_id": activity_id,
+                        "region": region or "US",
+                        "data_version": "^20"  # Use latest 20.x version
+                    },
+                    "parameters": {
+                        "distance": float(amount),
+                        "distance_unit": normalized_unit
+                    }
                 }
                 
-                if travel_mode == "car":
-                    travel_payload["car_details"] = {"car_type": "average"}
+                print(f"DEBUG - Trying Estimate endpoint for travel: {estimate_payload}")
+                result = await self.client.estimate(estimate_payload)
                 
-                print(f"DEBUG - Trying Travel Distance endpoint: {travel_payload}")
-                result = await self.client.travel_distance(travel_payload)
-
+                # Estimate endpoint returns co2e directly
+                co2e = result.get("co2e", 0)
+                
                 return {
                     "estimate": {
-                        "co2e": result.get("co2e", 0),
+                        "co2e": co2e,
                         "co2e_unit": "kg",
                         "emission_factor": result.get("emission_factor", {}),
-                        "activity_data": {
+                        "activity_data": result.get("activity_data", {
                             "activity_value": float(amount),
                             "activity_unit": unit
-                        }
+                        })
                     },
-                    "endpoint_type": "travel"
+                    "endpoint_type": "estimate"
                 }
             
             # PROCUREMENT: spending on supplies, equipment, services

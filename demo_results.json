@@ -1,0 +1,274 @@
+{
+  "timestamp": "2026-01-03T10:17:32.080224",
+  "steps": [
+    {
+      "step": 1,
+      "name": "User Registration",
+      "status": "success",
+      "email": "demo3722@example.com",
+      "response": {
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhNjJiNThmZC03OTA3LTQ0MTgtOTYyYS05OGRjYjVlNjA1YWUiLCJleHAiOjE3Njc0MzcyNTJ9.tPTJuU6y3UFy7VGGXtRbNiRVTZw_LhkGssXGYSESjcM",
+        "token_type": "bearer",
+        "user": {
+          "email": "demo3722@example.com",
+          "full_name": "Demo User 3722",
+          "id": "a62b58fd-7907-4418-962a-98dcb5e605ae",
+          "is_active": true,
+          "created_at": "2026-01-03T10:17:32.369802"
+        }
+      }
+    },
+    {
+      "step": 2,
+      "name": "Project Creation",
+      "status": "success",
+      "project_id": "e745e6cf-40cb-4e47-b166-e635b245cc95",
+      "response": {
+        "name": "Q1 2024 Emissions Report - Demo 3722",
+        "description": "Annual carbon emissions tracking and reporting",
+        "start_date": "2024-01-01",
+        "end_date": "2024-12-31",
+        "reporting_year": "2024",
+        "id": "e745e6cf-40cb-4e47-b166-e635b245cc95",
+        "organization_id": "523f72a5-6751-48d3-a551-e8bf66c51534",
+        "created_at": "2026-01-03T10:17:32.409092"
+      }
+    },
+    {
+      "step": 3,
+      "name": "CSV Upload & Emissions Calculation",
+      "status": "success",
+      "total_records": 10,
+      "job_id": "17ecb879-bf35-468d-bc3a-4a1bcdb78bb0",
+      "response": {
+        "success": true,
+        "job_id": "17ecb879-bf35-468d-bc3a-4a1bcdb78bb0",
+        "message": "Processed 10 activities successfully",
+        "total_records": 10,
+        "status": "completed"
+      }
+    },
+    {
+      "step": 4,
+      "name": "View Activities",
+      "status": "success",
+      "activity_count": 10,
+      "activities": [
+        {
+          "activity_type": "business_travel",
+          "sub_type": null,
+          "activity_date": "2025-07-15T00:00:00",
+          "description": null,
+          "id": "846e5fcd-f92b-411d-ac77-11a8843a669a",
+          "project_id": "e745e6cf-40cb-4e47-b166-e635b245cc95",
+          "scope": "Scope 3",
+          "co2e_kg": "29.145264",
+          "co2e_unit": "kg",
+          "calculation_method": "ipcc_ar6_gwp100",
+          "emission_factor_id": null,
+          "source_dataset": null,
+          "region": "US",
+          "year": "2026",
+          "created_at": "2026-01-03T10:18:24.253841"
+        },
+        {
+          "activity_type": "stationary_combustion",
+          "sub_type": null,
+          "activity_date": "2025-07-10T00:00:00",
+          "description": null,
+          "id": "bb336a2b-7262-47e2-ae51-0c239d22520b",
+          "project_id": "e745e6cf-40cb-4e47-b166-e635b245cc95",
+          "scope": "Scope 1",
+          "co2e_kg": "2118.757004",
+          "co2e_unit": "kg",
+          "calculation_method": "ipcc_ar6_gwp100",
+          "emission_factor_id": null,
+          "source_dataset": null,
+          "region": "US",
+          "year": "2026",
+          "created_at": "2026-01-03T10:18:24.253838"
+        },
+        {
+          "activity_type": "electricity",
+          "sub_type": null,
+          "activity_date": "2025-07-05T00:00:00",
+          "description": null,
+          "id": "ad241927-f4ff-40d5-b202-a6465d823c04",
+          "project_id": "e745e6cf-40cb-4e47-b166-e635b245cc95",
+          "scope": "Scope 2",
+          "co2e_kg": "1214.400000",
+          "co2e_unit": "kg",
+          "calculation_method": "ipcc_ar6_gwp100",
+          "emission_factor_id": null,
+          "source_dataset": null,
+          "region": "US",
+          "year": "2026",
+          "created_at": "2026-01-03T10:18:24.253835"
+        },
+        {
+          "activity_type": "employee_commuting",
+          "sub_type": null,
+          "activity_date": "2025-07-01T00:00:00",
+          "description": null,
+          "id": "ec058d74-56ed-40dc-93c5-4ab550659560",
+          "project_id": "e745e6cf-40cb-4e47-b166-e635b245cc95",
+          "scope": "Scope 3",
+          "co2e_kg": "3159.238833",
+          "co2e_unit": "kg",
+          "calculation_method": "ipcc_ar6_gwp100",
+          "emission_factor_id": null,
+          "source_dataset": null,
+          "region": "US",
+          "year": "2026",
+          "created_at": "2026-01-03T10:18:24.253832"
+        },
+        {
+          "activity_type": "stationary_combustion",
+          "sub_type": null,
+          "activity_date": "2025-06-25T00:00:00",
+          "description": null,
+          "id": "9d653dac-ee30-4758-9de2-04a93b2b2709",
+          "project_id": "e745e6cf-40cb-4e47-b166-e635b245cc95",
+          "scope": "Scope 1",
+          "co2e_kg": "1085.565000",
+          "co2e_unit": "kg",
+          "calculation_method": "ipcc_ar6_gwp100",
+          "emission_factor_id": null,
+          "source_dataset": null,
+          "region": "US",
+          "year": "2026",
+          "created_at": "2026-01-03T10:18:24.253829"
+        },
+        {
+          "activity_type": "business_travel",
+          "sub_type": null,
+          "activity_date": "2025-06-20T00:00:00",
+          "description": null,
+          "id": "0f34128c-a1a3-41aa-b28d-f817bb6ff0b3",
+          "project_id": "e745e6cf-40cb-4e47-b166-e635b245cc95",
+          "scope": "Scope 3",
+          "co2e_kg": "631.847767",
+          "co2e_unit": "kg",
+          "calculation_method": "ipcc_ar6_gwp100",
+          "emission_factor_id": null,
+          "source_dataset": null,
+          "region": "US",
+          "year": "2026",
+          "created_at": "2026-01-03T10:18:24.253826"
+        },
+        {
+          "activity_type": "electricity",
+          "sub_type": null,
+          "activity_date": "2025-06-15T00:00:00",
+          "description": null,
+          "id": "39072ab5-5fde-41a6-85cf-c789611a910c",
+          "project_id": "e745e6cf-40cb-4e47-b166-e635b245cc95",
+          "scope": "Scope 2",
+          "co2e_kg": "1934.200000",
+          "co2e_unit": "kg",
+          "calculation_method": "ipcc_ar6_gwp100",
+          "emission_factor_id": null,
+          "source_dataset": null,
+          "region": "US",
+          "year": "2026",
+          "created_at": "2026-01-03T10:18:24.253823"
+        },
+        {
+          "activity_type": "stationary_combustion",
+          "sub_type": null,
+          "activity_date": "2025-06-10T00:00:00",
+          "description": null,
+          "id": "44b797a9-3554-409e-9d98-da2b4c753623",
+          "project_id": "e745e6cf-40cb-4e47-b166-e635b245cc95",
+          "scope": "Scope 1",
+          "co2e_kg": "5826.581760",
+          "co2e_unit": "kg",
+          "calculation_method": "ipcc_ar6_gwp100",
+          "emission_factor_id": null,
+          "source_dataset": null,
+          "region": "US",
+          "year": "2026",
+          "created_at": "2026-01-03T10:18:24.253818"
+        },
+        {
+          "activity_type": "stationary_combustion",
+          "sub_type": null,
+          "activity_date": "2025-06-05T00:00:00",
+          "description": null,
+          "id": "d7405139-9ff9-44da-ada6-bf95449d3524",
+          "project_id": "e745e6cf-40cb-4e47-b166-e635b245cc95",
+          "scope": "Scope 1",
+          "co2e_kg": "1990.202500",
+          "co2e_unit": "kg",
+          "calculation_method": "ipcc_ar6_gwp100",
+          "emission_factor_id": null,
+          "source_dataset": null,
+          "region": "US",
+          "year": "2026",
+          "created_at": "2026-01-03T10:18:24.253815"
+        },
+        {
+          "activity_type": "electricity",
+          "sub_type": null,
+          "activity_date": "2025-06-01T00:00:00",
+          "description": null,
+          "id": "17fb0d01-04a0-4024-9278-82b2a227a22e",
+          "project_id": "e745e6cf-40cb-4e47-b166-e635b245cc95",
+          "scope": "Scope 2",
+          "co2e_kg": "480.700000",
+          "co2e_unit": "kg",
+          "calculation_method": "ipcc_ar6_gwp100",
+          "emission_factor_id": null,
+          "source_dataset": null,
+          "region": "US",
+          "year": "2026",
+          "created_at": "2026-01-03T10:18:24.253808"
+        }
+      ]
+    },
+    {
+      "step": 5,
+      "name": "Project Summary",
+      "status": "success",
+      "summary": {
+        "total_activities": 10,
+        "total_co2e_kg": "18470.638128",
+        "scope_breakdown": {
+          "Scope 1": "11021.106264",
+          "Scope 2": "3629.3",
+          "Scope 3": "3820.231864"
+        },
+        "activity_type_breakdown": {
+          "business_travel": "660.993031",
+          "electricity": "3629.3",
+          "employee_commuting": "3159.238833",
+          "stationary_combustion": "11021.106264"
+        }
+      }
+    },
+    {
+      "step": 6,
+      "name": "Batch Job Status",
+      "status": "success",
+      "jobs": [
+        {
+          "id": "17ecb879-bf35-468d-bc3a-4a1bcdb78bb0",
+          "status": "completed",
+          "total_records": 10,
+          "processed_records": 10,
+          "successful_records": 10,
+          "failed_records": 0,
+          "error_log": [],
+          "created_at": "2026-01-03T10:17:32.443608",
+          "completed_at": "2026-01-03T10:18:24.238972"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "email": "demo3722@example.com",
+    "project_id": "e745e6cf-40cb-4e47-b166-e635b245cc95",
+    "activity_count": 10,
+    "total_co2e_kg": "18470.638128"
+  }
+}

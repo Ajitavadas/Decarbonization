@@ -250,7 +250,7 @@ async def upload_csv(
                     unit_type = "volume"
                 elif unit_lower in ['eur', 'usd', 'gbp', 'chf', 'cad', 'aud', 'jpy', 'cny', 'inr', 'aed', 'sar', 'sek', 'nok', 'dkk']:
                     unit_type = "money"
-                elif unit_lower in ['km', 'kilometer', 'kilometre', 'mile', 'miles', 'm', 'meter', 'metre']:
+                elif unit_lower in ['km', 'kilometer', 'kilometre', 'mi', 'mile', 'miles', 'm', 'meter', 'metre']:
                     unit_type = "distance"  # For travel
                 else:
                     unit_type = "money"  # Default fallback
@@ -323,11 +323,39 @@ async def upload_csv(
                     successful_count += 1
                     continue
                 
+                # Determine activity_type based on unit_type and description
+                desc_lower = description.lower()
+                if unit_type == "energy":
+                    if any(word in desc_lower for word in ['electricity', 'electric', 'power', 'grid', 'server']):
+                        activity_type_val = "electricity"
+                    elif any(word in desc_lower for word in ['gas', 'heating', 'heat']):
+                        activity_type_val = "stationary_combustion"
+                    else:
+                        activity_type_val = "electricity"
+                elif unit_type == "volume":
+                    if any(word in desc_lower for word in ['diesel', 'fuel', 'gasoline', 'petrol', 'generator']):
+                        activity_type_val = "stationary_combustion"
+                    else:
+                        activity_type_val = "fuel"
+                elif unit_type == "distance":
+                    if any(word in desc_lower for word in ['flight', 'fly', 'air', 'plane']):
+                        activity_type_val = "business_travel"
+                    elif any(word in desc_lower for word in ['commute', 'employee']):
+                        activity_type_val = "employee_commuting"
+                    elif any(word in desc_lower for word in ['car', 'rental', 'vehicle', 'drive']):
+                        activity_type_val = "business_travel"
+                    else:
+                        activity_type_val = "transportation"
+                elif unit_type == "money":
+                    activity_type_val = "procurement"
+                else:
+                    activity_type_val = "other"
+                
                 # Create activity
                 activity = EmissionActivity(
                     project_id=project.id,
                     batch_job_id=batch_job.id,
-                    activity_type="procurement",  # Default, can be refined
+                    activity_type=activity_type_val,
                     sub_type=None,  # scope3Category not available in tuple return
                     scope=scope,
                     activity_date=activity_date,
