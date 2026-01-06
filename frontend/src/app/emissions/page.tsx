@@ -239,42 +239,52 @@ export default function EmissionsPage() {
                                                 <TableHead>Description</TableHead>
                                                 <TableHead>Type</TableHead>
                                                 <TableHead>Scope</TableHead>
+                                                <TableHead>Region</TableHead>
                                                 <TableHead className="text-right">Emissions (kg CO₂e)</TableHead>
                                                 <TableHead>Date</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {currentProject.activities.map((activity) => (
-                                                <TableRow key={activity.id} className="border-border">
-                                                    <TableCell className="font-medium">
-                                                        {activity.description || activity.activity_type.replace(/_/g, " ")}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Badge variant="secondary" className="font-normal">
-                                                            {activity.activity_type.replace(/_/g, " ")}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <div className="flex items-center gap-2">
-                                                            {getScopeIcon(activity.scope)}
-                                                            <span className={cn(
-                                                                "text-sm",
-                                                                activity.scope === "Scope 1" && "text-chart-5",
-                                                                activity.scope === "Scope 2" && "text-chart-2",
-                                                                activity.scope === "Scope 3" && "text-chart-3",
-                                                            )}>
-                                                                {activity.scope}
+                                            {currentProject.activities.map((activity) => {
+                                                const ef = activity.input_data?.autopilot_response?.estimate?.emission_factor;
+
+                                                return (
+                                                    <TableRow key={activity.id} className="border-border">
+                                                        <TableCell className="font-medium max-w-[200px] truncate" title={activity.description || activity.input_data?.description}>
+                                                            {activity.description || activity.input_data?.description || activity.activity_type.replace(/_/g, " ")}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Badge variant="secondary" className="font-normal">
+                                                                {activity.activity_type.replace(/_/g, " ")}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <div className="flex items-center gap-2">
+                                                                {getScopeIcon(activity.scope)}
+                                                                <span className={cn(
+                                                                    "text-sm",
+                                                                    activity.scope === "Scope 1" && "text-chart-5",
+                                                                    activity.scope === "Scope 2" && "text-chart-2",
+                                                                    activity.scope === "Scope 3" && "text-chart-3",
+                                                                )}>
+                                                                    {activity.scope}
+                                                                </span>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <span className="text-sm">
+                                                                {ef?.region || activity.region || "-"}
                                                             </span>
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell className="text-right font-medium">
-                                                        {formatNumber(Math.round(Number(activity.co2e_kg)))}
-                                                    </TableCell>
-                                                    <TableCell className="text-muted-foreground">
-                                                        {activity.activity_date ? formatDate(activity.activity_date) : "-"}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-medium">
+                                                            {formatNumber(Math.round(Number(activity.co2e_kg)))}
+                                                        </TableCell>
+                                                        <TableCell className="text-muted-foreground">
+                                                            {activity.activity_date ? formatDate(activity.activity_date) : "-"}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )
+                                            })}
                                         </TableBody>
                                     </Table>
                                 )}

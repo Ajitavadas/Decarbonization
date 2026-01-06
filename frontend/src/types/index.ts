@@ -34,6 +34,41 @@ export interface CreateProjectData {
 }
 
 // Activity - matches backend EmissionActivityResponse
+export interface ClimatiqEmissionFactor {
+    id: string;
+    name: string;
+    activity_id: string;
+    source: string;
+    source_dataset: string;
+    region: string;
+    year: number;
+    category?: string;
+}
+
+export interface ClimatiqActivityData {
+    activity_value: number;
+    activity_unit: string;
+}
+
+export interface ClimatiqEstimate {
+    co2e: number;
+    co2e_unit: string;
+    emission_factor?: ClimatiqEmissionFactor;
+    activity_data?: ClimatiqActivityData;
+}
+
+export interface ClimatiqAutopilotResponse {
+    estimate?: ClimatiqEstimate;
+}
+
+export interface ActivityInputData {
+    unit?: string;
+    amount?: number;
+    unit_type?: string;
+    description?: string;
+    autopilot_response?: ClimatiqAutopilotResponse;
+}
+
 export interface Activity {
     id: string;
     project_id: string;
@@ -49,6 +84,7 @@ export interface Activity {
     year?: string;
     activity_date?: string;
     description?: string;  // At top level, not in input_data
+    input_data?: ActivityInputData;  // Full Climatiq response with emission factor info
     created_at: string;
 }
 

@@ -116,6 +116,7 @@ class ActivityResponse(ActivityBase):
     source_dataset: Optional[str]
     region: Optional[str]
     year: Optional[str]
+    input_data: Optional[Dict[str, Any]] = None  # Contains full Climatiq response with emission factor info
     created_at: datetime
     
     class Config:
