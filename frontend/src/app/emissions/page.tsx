@@ -247,11 +247,11 @@ export default function EmissionsPage() {
                                             {currentProject.activities.map((activity) => (
                                                 <TableRow key={activity.id} className="border-border">
                                                     <TableCell className="font-medium">
-                                                        {activity.input_data.description}
+                                                        {activity.description || activity.activity_type.replace(/_/g, " ")}
                                                     </TableCell>
                                                     <TableCell>
                                                         <Badge variant="secondary" className="font-normal">
-                                                            {activity.activity_type.replace("_", " ")}
+                                                            {activity.activity_type.replace(/_/g, " ")}
                                                         </Badge>
                                                     </TableCell>
                                                     <TableCell>
@@ -268,7 +268,7 @@ export default function EmissionsPage() {
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="text-right font-medium">
-                                                        {formatNumber(Math.round(activity.co2e_kg))}
+                                                        {formatNumber(Math.round(Number(activity.co2e_kg)))}
                                                     </TableCell>
                                                     <TableCell className="text-muted-foreground">
                                                         {activity.activity_date ? formatDate(activity.activity_date) : "-"}

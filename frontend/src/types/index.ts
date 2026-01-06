@@ -33,21 +33,22 @@ export interface CreateProjectData {
     reporting_year: string;
 }
 
-// Activity
+// Activity - matches backend EmissionActivityResponse
 export interface Activity {
     id: string;
+    project_id: string;
     activity_type: ActivityType;
+    sub_type?: string;
     scope: Scope;
-    co2e_kg: number;
+    co2e_kg: number | string;  // Backend returns as string
     co2e_unit: string;
-    region: string;
+    calculation_method?: string;
+    emission_factor_id?: string;
+    source_dataset?: string;
+    region?: string;
+    year?: string;
     activity_date?: string;
-    input_data: {
-        description: string;
-        amount: number;
-        unit: string;
-        unit_type?: string;
-    };
+    description?: string;  // At top level, not in input_data
     created_at: string;
 }
 

@@ -76,31 +76,31 @@ export default function ScopeAnalysisPage() {
     const currentProject = projectsWithData.find(p => p.id === selectedProject)
     const summary = currentProject?.summary
 
-    // Prepare chart data
+    // Prepare chart data - parse values as Numbers since backend returns strings
     const pieData = summary ? [
-        { name: "Scope 1", value: summary.scope_breakdown["Scope 1"] || 0, color: "#f97316" },
-        { name: "Scope 2", value: summary.scope_breakdown["Scope 2"] || 0, color: "#3b82f6" },
-        { name: "Scope 3", value: summary.scope_breakdown["Scope 3"] || 0, color: "#eab308" },
+        { name: "Scope 1", value: Number(summary.scope_breakdown["Scope 1"]) || 0, color: "#f97316" },
+        { name: "Scope 2", value: Number(summary.scope_breakdown["Scope 2"]) || 0, color: "#3b82f6" },
+        { name: "Scope 3", value: Number(summary.scope_breakdown["Scope 3"]) || 0, color: "#eab308" },
     ].filter(d => d.value > 0) : []
 
     const barData = summary ? [
         {
             name: "Scope 1",
-            value: summary.scope_breakdown["Scope 1"] || 0,
+            value: Number(summary.scope_breakdown["Scope 1"]) || 0,
             fill: "#f97316",
             icon: Flame,
             description: "Direct emissions"
         },
         {
             name: "Scope 2",
-            value: summary.scope_breakdown["Scope 2"] || 0,
+            value: Number(summary.scope_breakdown["Scope 2"]) || 0,
             fill: "#3b82f6",
             icon: Factory,
             description: "Indirect (electricity)"
         },
         {
             name: "Scope 3",
-            value: summary.scope_breakdown["Scope 3"] || 0,
+            value: Number(summary.scope_breakdown["Scope 3"]) || 0,
             fill: "#eab308",
             icon: Truck,
             description: "Value chain"
