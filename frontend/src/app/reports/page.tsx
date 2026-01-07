@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { DashboardShell } from "@/components/dashboard/dashboard-shell"
+import { ReportGenerator } from "@/components/dashboard/report-generator"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
-import { FileText, FolderKanban, Loader2, ArrowRight } from "lucide-react"
+import { FileText, FolderKanban, Loader2, ArrowRight, ExternalLink } from "lucide-react"
 import { api } from "@/lib/api"
 import type { Project, User } from "@/types"
 import { formatDate, formatNumber } from "@/lib/utils"
@@ -97,9 +98,9 @@ export default function ReportsPage() {
                         </CardContent>
                     </Card>
                 ) : (
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-1">
                         {projectsWithActivities.map((project) => (
-                            <Card key={project.id} className="border-border bg-card hover:border-primary/50 transition-colors">
+                            <Card key={project.id} className="border-border bg-card">
                                 <CardHeader>
                                     <div className="flex items-start justify-between">
                                         <div className="flex items-center gap-3">
@@ -109,23 +110,26 @@ export default function ReportsPage() {
                                             <div>
                                                 <CardTitle className="text-base">{project.name}</CardTitle>
                                                 <CardDescription className="text-xs">
-                                                    {project.emission_activities_count} activities
+                                                    {project.emission_activities_count} activities • Created {formatDate(project.created_at)}
                                                 </CardDescription>
                                             </div>
                                         </div>
-                                        <Badge variant="secondary">{project.reporting_year}</Badge>
+                                        <div className="flex items-center gap-2">
+                                            <Badge variant="secondary">{project.reporting_year}</Badge>
+                                            <Link href={`/projects/${project.id}`}>
+                                                <Button variant="ghost" size="icon" title="View project details">
+                                                    <ExternalLink className="h-4 w-4" />
+                                                </Button>
+                                            </Link>
+                                        </div>
                                     </div>
                                 </CardHeader>
                                 <CardContent>
-                                    <div className="text-xs text-muted-foreground mb-4">
-                                        <p>Created {formatDate(project.created_at)}</p>
-                                    </div>
-                                    <Link href={`/projects/${project.id}`}>
-                                        <Button variant="outline" size="sm" className="w-full">
-                                            Generate Report
-                                            <ArrowRight className="ml-2 h-3 w-3" />
-                                        </Button>
-                                    </Link>
+                                    <ReportGenerator
+                                        projectId={project.id}
+                                        projectName={project.name}
+                                        hasActivities={project.emission_activities_count > 0}
+                                    />
                                 </CardContent>
                             </Card>
                         ))}
@@ -135,7 +139,7 @@ export default function ReportsPage() {
                 {/* All Projects Section */}
                 {projects.length > projectsWithActivities.length && (
                     <div className="mt-8">
-                        <h2 className="text-lg font-semibold text-foreground mb-4">Other Projects</h2>
+                        <h2 className="text-lg font-semibold text-foreground mb-4">Projects Without Data</h2>
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                             {projects.filter(p => p.emission_activities_count === 0).map((project) => (
                                 <Card key={project.id} className="border-border bg-card opacity-60">
@@ -158,10 +162,12 @@ export default function ReportsPage() {
                                     <CardContent>
                                         <div className="text-xs text-muted-foreground mb-4">
                                             <p>Created {formatDate(project.created_at)}</p>
+                                            <p className="text-amber-500 mt-2">Upload emission activities to generate reports</p>
                                         </div>
                                         <Link href={`/projects/${project.id}`}>
-                                            <Button variant="outline" size="sm" className="w-full" disabled>
-                                                Add Activities First
+                                            <Button variant="outline" size="sm" className="w-full">
+                                                Go to Project
+                                                <ArrowRight className="ml-2 h-3 w-3" />
                                             </Button>
                                         </Link>
                                     </CardContent>

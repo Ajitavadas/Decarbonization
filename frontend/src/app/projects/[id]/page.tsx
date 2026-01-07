@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback } from "react"
 import { useRouter, useParams } from "next/navigation"
 import Link from "next/link"
 import { DashboardShell } from "@/components/dashboard/dashboard-shell"
-import { ReportGenerator } from "@/components/dashboard/report-generator"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -280,15 +279,6 @@ export default function ProjectDetailPage() {
                             </div>
                         </CardContent>
                     </Card>
-                )}
-
-                {/* Report Generator */}
-                {project && (
-                    <ReportGenerator 
-                        projectId={projectId}
-                        projectName={project.name}
-                        hasActivities={activities.length > 0}
-                    />
                 )}
 
                 {/* Activities Table */}
