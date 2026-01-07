@@ -184,8 +184,14 @@ class ApiClient {
         );
 
         if (!response.ok) {
-            const error = await response.json().catch(() => ({ detail: "Report generation failed" }));
-            throw new Error(error.detail || "Report generation failed");
+            let errorMessage = "Report generation failed";
+            try {
+                const error = await response.json();
+                errorMessage = error.detail || errorMessage;
+            } catch {
+                errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            }
+            throw new Error(errorMessage);
         }
 
         return response.blob();

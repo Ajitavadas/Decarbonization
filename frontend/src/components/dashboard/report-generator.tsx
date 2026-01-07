@@ -45,7 +45,9 @@ export function ReportGenerator({ projectId, projectName, hasActivities }: Repor
             document.body.removeChild(link)
             window.URL.revokeObjectURL(url)
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to generate report")
+            const errorMessage = err instanceof Error ? err.message : "Failed to generate report"
+            setError(errorMessage)
+            console.error("Report generation error:", err)
         } finally {
             if (isHTML) {
                 setLoadingHTML(false)
