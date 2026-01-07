@@ -35,7 +35,7 @@ const navItems = [
     { icon: Zap, label: "Emissions", href: "/emissions" },
     { icon: Globe, label: "Scope Analysis", href: "/scope-analysis" },
     { icon: Target, label: "Reduction Targets", href: "/targets", disabled: true },
-    { icon: AlertTriangle, label: "Anomalies", href: "/anomalies", badge: 3, disabled: true },
+    { icon: AlertTriangle, label: "Anomalies", href: "/anomalies" },
     { icon: FileBarChart, label: "Reports", href: "/reports", disabled: true },
 ]
 

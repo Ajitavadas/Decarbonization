@@ -169,6 +169,81 @@ class ApiClient {
     async deleteActivity(id: string): Promise<void> {
         await this.request(`/activities/${id}`, { method: "DELETE" });
     }
+
+    // Audit endpoints
+    async runAudit(data?: { project_id?: string; include_ai_analysis?: boolean }): Promise<import("@/types").AuditRunResponse> {
+        return this.request<import("@/types").AuditRunResponse>("/audit/run", {
+            method: "POST",
+            body: JSON.stringify(data || { include_ai_analysis: true }),
+        });
+    }
+
+    async getAuditFindings(params?: {
+        status?: string;
+        flag_type?: string;
+        severity?: string;
+        limit?: number;
+        offset?: number;
+    }): Promise<import("@/types").FindingsResponse> {
+        const searchParams = new URLSearchParams();
+        if (params?.status) searchParams.append("status", params.status);
+        if (params?.flag_type) searchParams.append("flag_type", params.flag_type);
+        if (params?.severity) searchParams.append("severity", params.severity);
+        if (params?.limit) searchParams.append("limit", params.limit.toString());
+        if (params?.offset) searchParams.append("offset", params.offset.toString());
+
+        const query = searchParams.toString();
+        return this.request<import("@/types").FindingsResponse>(`/audit/findings${query ? `?${query}` : ""}`);
+    }
+
+    async getAuditSummary(): Promise<import("@/types").AuditSummary> {
+        return this.request<import("@/types").AuditSummary>("/audit/summary");
+    }
+
+    async resolveFinding(id: string, status: string, notes?: string): Promise<{ id: string; status: string }> {
+        return this.request<{ id: string; status: string }>(`/audit/findings/${id}/resolve`, {
+            method: "PATCH",
+            body: JSON.stringify({ status, notes }),
+        });
+    }
+
+    // Organization endpoints
+    async getMyOrganization(): Promise<{
+        id: string;
+        name: string;
+        industry: string | null;
+        country: string | null;
+        emission_archetype: string | null;
+        is_active: boolean;
+    }> {
+        return this.request("/organizations/me");
+    }
+
+    async getArchetypes(): Promise<{
+        archetypes: Array<{
+            id: string;
+            name: string;
+            icon: string;
+            tagline: string;
+            description: string;
+            examples: string[];
+            dominant_scope: string;
+        }>;
+    }> {
+        return this.request("/organizations/archetypes");
+    }
+
+    async setOrganizationArchetype(archetype: string): Promise<{
+        id: string;
+        name: string;
+        emission_archetype: string;
+    }> {
+        return this.request("/organizations/archetype", {
+            method: "PATCH",
+            body: JSON.stringify({ archetype }),
+        });
+    }
 }
 
 export const api = new ApiClient();
+
