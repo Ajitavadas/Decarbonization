@@ -169,6 +169,31 @@ class ApiClient {
     async deleteActivity(id: string): Promise<void> {
         await this.request(`/activities/${id}`, { method: "DELETE" });
     }
+
+    // Report endpoints
+    async generateReport(projectId: string, format: 'pdf' | 'html'): Promise<Blob> {
+        const token = this.getToken();
+        const response = await fetch(
+            `${API_URL}/projects/${projectId}/report?format=${format}`,
+            {
+                method: "GET",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            }
+        );
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: "Report generation failed" }));
+            throw new Error(error.detail || "Report generation failed");
+        }
+
+        return response.blob();
+    }
+
+    async getReportSummary(projectId: string): Promise<any> {
+        return this.request(`/projects/${projectId}/report-summary`);
+    }
 }
 
 export const api = new ApiClient();
