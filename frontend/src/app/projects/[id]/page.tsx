@@ -11,7 +11,7 @@ import { Progress } from "@/components/ui/progress"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
     ArrowLeft, Upload, Loader2, FileUp, CheckCircle2, XCircle,
-    Cloud, Flame, Factory, Truck, Trash2
+    Cloud, Flame, Factory, Truck, Trash2, Download
 } from "lucide-react"
 import { api } from "@/lib/api"
 import type { Project, User, Activity, ProjectSummary, BatchJob } from "@/types"
@@ -31,6 +31,7 @@ export default function ProjectDetailPage() {
     const [loading, setLoading] = useState(true)
     const [uploading, setUploading] = useState(false)
     const [uploadError, setUploadError] = useState("")
+    const [downloadingPdf, setDownloadingPdf] = useState(false)
 
     const fetchData = useCallback(async () => {
         if (!api.isAuthenticated()) {
@@ -95,6 +96,26 @@ export default function ProjectDetailPage() {
         }
     }
 
+    const handleDownloadPdf = async () => {
+        if (!project) return
+        setDownloadingPdf(true)
+        try {
+            const blob = await api.downloadReport(projectId, 'pdf')
+            const url = window.URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `${project.name.replace(/\s+/g, '_')}_carbon_report.pdf`
+            document.body.appendChild(a)
+            a.click()
+            window.URL.revokeObjectURL(url)
+            document.body.removeChild(a)
+        } catch (error: any) {
+            alert(`Failed to download PDF: ${error.message}`)
+        } finally {
+            setDownloadingPdf(false)
+        }
+    }
+
     const getScopeIcon = (scope: string) => {
         switch (scope) {
             case "Scope 1":
@@ -141,7 +162,7 @@ export default function ProjectDetailPage() {
                             </p>
                         </div>
                     </div>
-                    <div>
+                    <div className="flex gap-2">
                         <input
                             type="file"
                             id="csv-upload"
@@ -167,6 +188,25 @@ export default function ProjectDetailPage() {
                                 </span>
                             </Button>
                         </label>
+                        {activities.length > 0 && (
+                            <Button
+                                variant="outline"
+                                onClick={handleDownloadPdf}
+                                disabled={downloadingPdf}
+                            >
+                                {downloadingPdf ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Generating...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Download className="mr-2 h-4 w-4" />
+                                        Download PDF
+                                    </>
+                                )}
+                            </Button>
+                        )}
                     </div>
                 </div>
 

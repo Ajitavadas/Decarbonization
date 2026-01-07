@@ -171,34 +171,26 @@ class ApiClient {
     }
 
     // Report endpoints
-    async generateReport(projectId: string, format: 'pdf' | 'html'): Promise<Blob> {
+    async downloadReport(projectId: string, format: 'pdf' | 'html'): Promise<Blob> {
+        // Use project-scoped report endpoint exposed by backend
         const token = this.getToken();
-        const response = await fetch(
-            `${API_URL}/projects/${projectId}/report?format=${format}`,
-            {
-                method: "GET",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            }
-        );
+        const response = await fetch(`${API_URL}/projects/${projectId}/report?format=${format}`, {
+            method: "GET",
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        });
 
         if (!response.ok) {
-            let errorMessage = "Report generation failed";
-            try {
-                const error = await response.json();
-                errorMessage = error.detail || errorMessage;
-            } catch {
-                errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-            }
-            throw new Error(errorMessage);
+            const error = await response.json().catch(() => ({ detail: "Report generation failed" }));
+            throw new Error(error.detail || "Report generation failed");
         }
 
         return response.blob();
     }
 
     async getReportSummary(projectId: string): Promise<any> {
-        return this.request(`/projects/${projectId}/report-summary`);
+        return this.request<any>(`/projects/${projectId}/report-summary`);
     }
 }
 

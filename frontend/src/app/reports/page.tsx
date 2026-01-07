@@ -2,46 +2,91 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { DashboardShell } from "@/components/dashboard/dashboard-shell"
-import { ReportGenerator } from "@/components/dashboard/report-generator"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import Link from "next/link"
-import { FileText, FolderKanban, Loader2, ArrowRight, ExternalLink } from "lucide-react"
+import { FileText, Download, Loader2, FolderKanban, Calendar, FileDown } from "lucide-react"
 import { api } from "@/lib/api"
-import type { Project, User } from "@/types"
-import { formatDate, formatNumber } from "@/lib/utils"
+import type { Project, User, Activity } from "@/types"
+import { formatDate } from "@/lib/utils"
+
+interface ProjectWithActivities extends Project {
+    activity_count: number
+}
 
 export default function ReportsPage() {
     const router = useRouter()
     const [user, setUser] = useState<User | null>(null)
-    const [projects, setProjects] = useState<Project[]>([])
+    const [projects, setProjects] = useState<ProjectWithActivities[]>([])
     const [loading, setLoading] = useState(true)
+    const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null)
 
     useEffect(() => {
-        const fetchData = async () => {
-            if (!api.isAuthenticated()) {
-                router.push("/login")
-                return
-            }
+        fetchData()
+    }, [])
 
-            try {
-                const [userData, projectsData] = await Promise.all([
-                    api.getMe(),
-                    api.getProjects(),
-                ])
-                setUser(userData)
-                setProjects(projectsData)
-            } catch {
-                router.push("/login")
-            } finally {
-                setLoading(false)
-            }
+    const fetchData = async () => {
+        if (!api.isAuthenticated()) {
+            router.push("/login")
+            return
         }
 
-        fetchData()
-    }, [router])
+        try {
+            const [userData, projectsData] = await Promise.all([
+                api.getMe(),
+                api.getProjects(),
+            ])
+
+            setUser(userData)
+
+            // Fetch activity counts for each project
+            const projectsWithCounts = await Promise.all(
+                projectsData.map(async (project) => {
+                    try {
+                        const activities = await api.getActivities(project.id)
+                        return {
+                            ...project,
+                            activity_count: activities.length,
+                        }
+                    } catch {
+                        return {
+                            ...project,
+                            activity_count: 0,
+                        }
+                    }
+                })
+            )
+
+            // Filter projects with activities
+            const projectsWithData = projectsWithCounts.filter((p) => p.activity_count > 0)
+            setProjects(projectsWithData)
+        } catch (error) {
+            console.error("Failed to fetch data:", error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleDownloadPdf = async (projectId: string, projectName: string) => {
+        setDownloadingPdf(projectId)
+        try {
+            const blob = await api.downloadReport(projectId, 'pdf')
+            const url = window.URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `${projectName.replace(/\s+/g, '_')}_carbon_report.pdf`
+            document.body.appendChild(a)
+            a.click()
+            window.URL.revokeObjectURL(url)
+            document.body.removeChild(a)
+        } catch (error: any) {
+            alert(`Failed to download PDF: ${error.message}`)
+        } finally {
+            setDownloadingPdf(null)
+        }
+    }
 
     if (loading) {
         return (
@@ -50,8 +95,6 @@ export default function ReportsPage() {
             </div>
         )
     }
-
-    const projectsWithActivities = projects.filter(p => p.emission_activities_count > 0)
 
     return (
         <DashboardShell userName={user?.full_name} organizationName={user?.organization?.name}>
@@ -66,115 +109,107 @@ export default function ReportsPage() {
 
                 {/* Info Card */}
                 <Card className="border-border bg-card">
-                    <CardContent className="pt-6">
-                        <div className="flex items-start gap-3">
-                            <FileText className="h-5 w-5 text-primary mt-0.5" />
+                    <CardHeader>
+                        <div className="flex items-start gap-4">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                                <FileText className="h-6 w-6 text-primary" />
+                            </div>
                             <div className="flex-1">
-                                <p className="text-sm font-medium text-foreground">Generate Reports</p>
-                                <p className="text-sm text-muted-foreground mt-1">
-                                    Open any project with emission activities to generate professional PDF or HTML reports. 
+                                <CardTitle className="text-base font-medium">Generate Reports</CardTitle>
+                                <CardDescription className="mt-1">
+                                    Open any project with emission activities to generate professional PDF reports. 
                                     Reports include visualizations, scope breakdown, activity analysis, and detailed data tables.
-                                </p>
+                                </CardDescription>
                             </div>
                         </div>
-                    </CardContent>
+                    </CardHeader>
                 </Card>
 
-                {/* Projects Grid */}
-                {projectsWithActivities.length === 0 ? (
+                {/* Projects with Data */}
+                {projects.length === 0 ? (
                     <Card className="border-border bg-card">
                         <CardContent className="flex flex-col items-center justify-center py-12">
                             <FolderKanban className="h-12 w-12 text-muted-foreground mb-4" />
                             <h3 className="text-lg font-medium text-foreground mb-2">No projects with data</h3>
-                            <p className="text-sm text-muted-foreground mb-4 text-center">
+                            <p className="text-sm text-muted-foreground mb-4 text-center max-w-md">
                                 Create a project and upload emission activities to generate reports
                             </p>
                             <Link href="/projects">
                                 <Button>
                                     Go to Projects
-                                    <ArrowRight className="ml-2 h-4 w-4" />
+                                    <FolderKanban className="ml-2 h-4 w-4" />
                                 </Button>
                             </Link>
                         </CardContent>
                     </Card>
                 ) : (
-                    <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-1">
-                        {projectsWithActivities.map((project) => (
-                            <Card key={project.id} className="border-border bg-card">
-                                <CardHeader>
-                                    <div className="flex items-start justify-between">
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                                                <FileText className="h-5 w-5 text-primary" />
-                                            </div>
-                                            <div>
-                                                <CardTitle className="text-base">{project.name}</CardTitle>
-                                                <CardDescription className="text-xs">
-                                                    {project.emission_activities_count} activities • Created {formatDate(project.created_at)}
-                                                </CardDescription>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <Badge variant="secondary">{project.reporting_year}</Badge>
-                                            <Link href={`/projects/${project.id}`}>
-                                                <Button variant="ghost" size="icon" title="View project details">
-                                                    <ExternalLink className="h-4 w-4" />
-                                                </Button>
-                                            </Link>
-                                        </div>
-                                    </div>
-                                </CardHeader>
-                                <CardContent>
-                                    <ReportGenerator
-                                        projectId={project.id}
-                                        projectName={project.name}
-                                        hasActivities={project.emission_activities_count > 0}
-                                    />
-                                </CardContent>
-                            </Card>
-                        ))}
-                    </div>
-                )}
-
-                {/* All Projects Section */}
-                {projects.length > projectsWithActivities.length && (
-                    <div className="mt-8">
-                        <h2 className="text-lg font-semibold text-foreground mb-4">Projects Without Data</h2>
+                    <>
+                        <div>
+                            <h2 className="text-lg font-medium text-foreground mb-4">
+                                Projects with Data ({projects.length})
+                            </h2>
+                        </div>
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                            {projects.filter(p => p.emission_activities_count === 0).map((project) => (
-                                <Card key={project.id} className="border-border bg-card opacity-60">
+                            {projects.map((project) => (
+                                <Card key={project.id} className="border-border bg-card hover:border-primary/50 transition-colors">
                                     <CardHeader>
                                         <div className="flex items-start justify-between">
-                                            <div className="flex items-center gap-3">
-                                                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                                                    <FolderKanban className="h-5 w-5 text-muted-foreground" />
-                                                </div>
-                                                <div>
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <FolderKanban className="h-4 w-4 text-primary" />
                                                     <CardTitle className="text-base">{project.name}</CardTitle>
-                                                    <CardDescription className="text-xs">
-                                                        No activities yet
-                                                    </CardDescription>
                                                 </div>
+                                                <CardDescription className="text-xs">
+                                                    {project.description || "No description"}
+                                                </CardDescription>
                                             </div>
                                             <Badge variant="secondary">{project.reporting_year}</Badge>
                                         </div>
                                     </CardHeader>
-                                    <CardContent>
-                                        <div className="text-xs text-muted-foreground mb-4">
-                                            <p>Created {formatDate(project.created_at)}</p>
-                                            <p className="text-amber-500 mt-2">Upload emission activities to generate reports</p>
+                                    <CardContent className="space-y-3">
+                                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                            <div className="flex items-center gap-1">
+                                                <Calendar className="h-3 w-3" />
+                                                <span>Created {formatDate(project.created_at)}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-xs">
+                                            <FileDown className="h-3 w-3 text-muted-foreground" />
+                                            <span className="text-muted-foreground">
+                                                {project.activity_count} {project.activity_count === 1 ? 'activity' : 'activities'}
+                                            </span>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <Button
+                                                variant="default"
+                                                size="sm"
+                                                className="w-full"
+                                                onClick={() => handleDownloadPdf(project.id, project.name)}
+                                                disabled={downloadingPdf === project.id}
+                                            >
+                                                {downloadingPdf === project.id ? (
+                                                    <>
+                                                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                                                        Generating...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Download className="mr-2 h-3 w-3" />
+                                                        Download PDF
+                                                    </>
+                                                )}
+                                            </Button>
                                         </div>
                                         <Link href={`/projects/${project.id}`}>
-                                            <Button variant="outline" size="sm" className="w-full">
-                                                Go to Project
-                                                <ArrowRight className="ml-2 h-3 w-3" />
+                                            <Button variant="ghost" size="sm" className="w-full">
+                                                View Project Details
                                             </Button>
                                         </Link>
                                     </CardContent>
                                 </Card>
                             ))}
                         </div>
-                    </div>
+                    </>
                 )}
             </div>
         </DashboardShell>
