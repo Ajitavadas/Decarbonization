@@ -165,7 +165,7 @@ export function CarbonCopilot({ open, onClose }: CarbonCopilotProps) {
                                 >
                                     {message.content}
                                 </div>
-                                <span className="text-[10px] text-muted-foreground">
+                                <span className="text-[10px] text-muted-foreground" suppressHydrationWarning>
                                     {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                                 </span>
                             </div>

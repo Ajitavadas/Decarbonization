@@ -5,7 +5,7 @@ Stores detected gaps, anomalies, and archetype mismatches per organization
 
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Index
+from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Index, Integer
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 
@@ -51,6 +51,15 @@ class FlaggedEvent(Base):
     resolved_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     resolution_notes = Column(Text, nullable=True)
     resolved_at = Column(DateTime, nullable=True)
+    
+    # Confidence scoring (composable formula, no AI required)
+    confidence_score = Column(Integer, nullable=True)  # 0-100
+    confidence_breakdown = Column(JSONB, nullable=True)  # {"completeness": 40, "detection_method": 25, "historical_match": 20, "activity_count": 15}
+    
+    # AI-generated explanation (cached)
+    ai_explanation = Column(Text, nullable=True)
+    ai_explanation_model = Column(String(50), nullable=True)  # Which model generated it
+    ai_explanation_at = Column(DateTime, nullable=True)
     
     # Audit metadata
     audit_run_id = Column(UUID(as_uuid=True), nullable=True)  # Groups findings from same audit run

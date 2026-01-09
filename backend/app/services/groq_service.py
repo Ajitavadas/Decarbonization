@@ -86,6 +86,35 @@ class GroqService:
             logger.error(f"Groq recommendation generation failed: {e}")
             return "Review this finding and take appropriate action."
     
+    async def generate_strategies(
+        self,
+        prompt: str,
+        use_quality_model: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Generate reduction strategies using Groq
+        
+        Args:
+            prompt: The strategy generation prompt
+            use_quality_model: If True, use 70b model; else use 8b instant
+            
+        Returns:
+            Dict with strategies list
+        """
+        if not self.api_key:
+            logger.warning("Groq API key not configured, skipping strategy generation")
+            return {"strategies": [], "skipped": True, "reason": "API key not configured"}
+        
+        # Select model based on quality requirement
+        model = "llama-3.3-70b-versatile" if use_quality_model else "llama-3.1-8b-instant"
+        
+        try:
+            response = await self._call_groq(prompt, json_mode=True, model=model)
+            return self._parse_response(response)
+        except Exception as e:
+            logger.error(f"Groq strategy generation failed: {e}")
+            return {"strategies": [], "error": str(e)}
+    
     def _build_anomaly_prompt(
         self,
         activity_data: List[Dict[str, Any]],
@@ -150,13 +179,14 @@ Context: {json.dumps(context, indent=2)}
 
 Provide a concise (1-2 sentences), actionable recommendation. Be specific to the context."""
     
-    async def _call_groq(self, prompt: str, json_mode: bool = False) -> str:
+    async def _call_groq(self, prompt: str, json_mode: bool = False, model: Optional[str] = None) -> str:
         """
         Make API call to Groq
         
         Args:
             prompt: The prompt to send
             json_mode: Whether to request JSON output
+            model: Optional model override (defaults to self.model)
             
         Returns:
             Response text from Groq
@@ -169,7 +199,7 @@ Provide a concise (1-2 sentences), actionable recommendation. Be specific to the
         messages = [{"role": "user", "content": prompt}]
         
         payload = {
-            "model": self.model,
+            "model": model or self.model,
             "messages": messages,
             "temperature": 0.3,  # Lower for more consistent analysis
             "max_tokens": 2000

@@ -243,7 +243,119 @@ class ApiClient {
             body: JSON.stringify({ archetype }),
         });
     }
+
+    // Reduction Target endpoints
+    async getTargets(activeOnly: boolean = true): Promise<ReductionTarget[]> {
+        return this.request<ReductionTarget[]>(`/targets/?active_only=${activeOnly}`);
+    }
+
+    async getTarget(id: string): Promise<ReductionTarget> {
+        return this.request<ReductionTarget>(`/targets/${id}`);
+    }
+
+    async createTarget(data: CreateTargetData): Promise<ReductionTarget> {
+        return this.request<ReductionTarget>("/targets/", {
+            method: "POST",
+            body: JSON.stringify(data),
+        });
+    }
+
+    async updateTarget(id: string, data: Partial<CreateTargetData>): Promise<ReductionTarget> {
+        return this.request<ReductionTarget>(`/targets/${id}`, {
+            method: "PUT",
+            body: JSON.stringify(data),
+        });
+    }
+
+    async deleteTarget(id: string): Promise<void> {
+        await this.request(`/targets/${id}`, { method: "DELETE" });
+    }
+
+    async calculateTargetProgress(id: string): Promise<ReductionTarget> {
+        return this.request<ReductionTarget>(`/targets/${id}/calculate-progress`, {
+            method: "POST",
+        });
+    }
+
+    // Strategy endpoints
+    async getStrategies(targetId: string): Promise<ReductionStrategy[]> {
+        return this.request<ReductionStrategy[]>(`/targets/${targetId}/strategies`);
+    }
+
+    async generateStrategies(targetId: string, forceRefresh: boolean = false): Promise<ReductionStrategy[]> {
+        return this.request<ReductionStrategy[]>(`/targets/${targetId}/strategies/generate`, {
+            method: "POST",
+            body: JSON.stringify({ force_refresh: forceRefresh, max_strategies: 5 }),
+        });
+    }
+
+    async updateStrategyStatus(strategyId: string, status: string): Promise<ReductionStrategy> {
+        return this.request<ReductionStrategy>(`/targets/strategies/${strategyId}/status`, {
+            method: "PATCH",
+            body: JSON.stringify({ status }),
+        });
+    }
+}
+
+// Type definitions for Reduction Targets
+export interface ReductionTarget {
+    id: string;
+    name: string;
+    description: string | null;
+    target_type: "absolute" | "percentage";
+    scope: string | null;
+    baseline_year: string;
+    baseline_value: number;
+    target_year: string;
+    target_value: number;
+    milestones: Milestone[];
+    current_year: string | null;
+    current_value: number | null;
+    current_reduction_pct: number | null;
+    progress_percentage: number | null;
+    status: "on_track" | "at_risk" | "off_track" | "achieved";
+    is_active: boolean;
+    created_at: string;
+    last_calculated_at: string | null;
+}
+
+export interface Milestone {
+    year: string;
+    value: number;
+    achieved: boolean;
+    achieved_at?: string;
+}
+
+export interface CreateTargetData {
+    name: string;
+    description?: string;
+    target_type: "absolute" | "percentage";
+    scope?: string;
+    baseline_year: string;
+    baseline_value: number;
+    target_year: string;
+    target_value: number;
+    milestones?: Milestone[];
+    project_id?: string;
+}
+
+export interface ReductionStrategy {
+    id: string;
+    title: string;
+    description: string;
+    category: string;
+    scope: string | null;
+    difficulty: "easy" | "medium" | "hard" | null;
+    priority: number;
+    implementation_timeframe: string | null;
+    estimated_reduction_pct: number | null;
+    estimated_cost: number | null;
+    estimated_savings: number | null;
+    payback_period_months: number | null;
+    source: "ai" | "manual";
+    status: string;
+    is_ai_generated: boolean;
+    created_at: string;
 }
 
 export const api = new ApiClient();
-

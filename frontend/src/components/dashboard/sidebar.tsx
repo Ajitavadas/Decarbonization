@@ -34,7 +34,7 @@ const navItems = [
     { icon: Upload, label: "Activity Data Upload", href: "/upload" },
     { icon: Zap, label: "Emissions", href: "/emissions" },
     { icon: Globe, label: "Scope Analysis", href: "/scope-analysis" },
-    { icon: Target, label: "Reduction Targets", href: "/targets", disabled: true },
+    { icon: Target, label: "Reduction Targets", href: "/targets" },
     { icon: AlertTriangle, label: "Anomalies", href: "/anomalies" },
     { icon: FileBarChart, label: "Reports", href: "/reports", disabled: true },
 ]
@@ -131,18 +131,17 @@ export function Sidebar({ collapsed, onToggle, onToggleCopilot, copilotOpen }: S
                                     variant={copilotOpen ? "secondary" : "ghost"}
                                     onClick={onToggleCopilot}
                                     className={cn(
-                                        "w-full justify-start gap-3 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground opacity-50 cursor-not-allowed",
+                                        "w-full justify-start gap-3 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                                         copilotOpen && "bg-sidebar-accent text-sidebar-accent-foreground",
                                         collapsed && "justify-center px-2",
                                     )}
-                                    disabled
                                 >
                                     <div className={cn("flex h-5 w-5 items-center justify-center rounded", copilotOpen && "ai-gradient rounded-md")}>
                                         <Sparkles className={cn("h-4 w-4 shrink-0", copilotOpen && "text-primary-foreground")} />
                                     </div>
                                     {!collapsed && <span>Carbon Copilot</span>}
-                                    {!collapsed && (
-                                        <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Soon</span>
+                                    {!collapsed && copilotOpen && (
+                                        <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary">Active</span>
                                     )}
                                 </Button>
                             )
