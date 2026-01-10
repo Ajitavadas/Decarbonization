@@ -20,7 +20,7 @@ class AIBaseService:
         """Initialize AI clients"""
         self.mistral_api_key = settings.MISTRAL_API_KEY
         self.mistral_base_url = "https://api.mistral.ai/v1"
-        self.timeout = httpx.Timeout(60.0, connect=10.0)
+        self.timeout = httpx.Timeout(15.0, connect=5.0)  # Reduced timeout for faster fallback
     
     async def call_ai(
         self,

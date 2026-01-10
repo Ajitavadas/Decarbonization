@@ -1,0 +1,43 @@
+description,amount,unit,region,year,activity_date,category
+Office electricity - January,12500,kWh,US,2024,2024-01-15,electricity
+Office electricity - February,13200,kWh,US,2024,2024-02-15,electricity
+Office electricity - March,11800,kWh,US,2024,2024-03-15,electricity
+Office electricity - April,10500,kWh,US,2024,2024-04-15,electricity
+Office electricity - May,9800,kWh,US,2024,2024-05-15,electricity
+Office electricity - June,14200,kWh,US,2024,2024-06-15,electricity
+Office electricity - July,15500,kWh,US,2024,2024-07-15,electricity
+Office electricity - August,15800,kWh,US,2024,2024-08-15,electricity
+Office electricity - September,13500,kWh,US,2024,2024-09-15,electricity
+Office electricity - October,12200,kWh,US,2024,2024-10-15,electricity
+Office electricity - November,13800,kWh,US,2024,2024-11-15,electricity
+Office electricity - December,14500,kWh,US,2024,2024-12-15,electricity
+Building heating - January natural gas,2500,therm,US,2024,2024-01-20,natural_gas
+Building heating - February natural gas,2800,therm,US,2024,2024-02-20,natural_gas
+Building heating - March natural gas,2200,therm,US,2024,2024-03-20,natural_gas
+Building heating - April natural gas,800,therm,US,2024,2024-04-20,natural_gas
+Building heating - November natural gas,1800,therm,US,2024,2024-11-20,natural_gas
+Building heating - December natural gas,2600,therm,US,2024,2024-12-20,natural_gas
+Delivery fleet diesel fuel - January,1200,gallon,US,2024,2024-01-10,diesel
+Delivery fleet diesel fuel - February,1150,gallon,US,2024,2024-02-10,diesel
+Delivery fleet diesel fuel - March,1300,gallon,US,2024,2024-03-10,diesel
+Delivery fleet diesel fuel - April,1250,gallon,US,2024,2024-04-10,diesel
+Delivery fleet diesel fuel - May,1400,gallon,US,2024,2024-05-10,diesel
+Delivery fleet diesel fuel - June,1350,gallon,US,2024,2024-06-10,diesel
+Delivery fleet diesel fuel - July,1500,gallon,US,2024,2024-07-10,diesel
+Delivery fleet diesel fuel - August,1450,gallon,US,2024,2024-08-10,diesel
+Delivery fleet diesel fuel - September,1300,gallon,US,2024,2024-09-10,diesel
+Delivery fleet diesel fuel - October,1200,gallon,US,2024,2024-10-10,diesel
+Delivery fleet diesel fuel - November,1250,gallon,US,2024,2024-11-10,diesel
+Delivery fleet diesel fuel - December,1400,gallon,US,2024,2024-12-10,diesel
+Flight NYC to Los Angeles round trip,5,trip,US,2024,2024-03-05,business_travel
+Flight NYC to Chicago round trip,8,trip,US,2024,2024-05-12,business_travel
+Flight NYC to London international,2,trip,GB,2024,2024-07-20,business_travel
+Train NYC to Boston commute,15,trip,US,2024,2024-09-15,business_travel
+Flight NYC to Miami vacation,4,trip,US,2024,2024-11-08,business_travel
+Employee commuting Q1,250,km,US,2024,2024-02-28,employee_commute
+Employee commuting Q2,220,km,US,2024,2024-05-31,employee_commute
+Employee commuting Q3,180,km,US,2024,2024-08-31,employee_commute
+Employee commuting Q4,240,km,US,2024,2024-11-30,employee_commute
+Office waste disposal Q1,2500,kg,US,2024,2024-04-15,waste
+Office waste disposal Q2,2200,kg,US,2024,2024-07-15,waste
+Office waste disposal Q3,2100,kg,US,2024,2024-10-15,waste

@@ -147,3 +147,67 @@ export interface UploadResponse {
     total_records: number;
     file_name: string;
 }
+
+// Audit / Anomalies
+export type FlagType = "gap" | "anomaly" | "archetype_mismatch";
+export type Severity = "info" | "warning" | "critical";
+export type FindingStatus = "open" | "acknowledged" | "resolved" | "false_positive";
+
+export interface AuditFinding {
+    id: string;
+    flag_type: FlagType;
+    severity: Severity;
+    rule_id: string;
+    title: string;
+    description?: string;
+    recommendation?: string;
+    evidence?: Record<string, unknown>;
+    status: FindingStatus;
+    project_id?: string;
+    activity_id?: string;
+    created_at?: string;
+    resolved_at?: string;
+    resolution_notes?: string;
+}
+
+export interface AuditSummary {
+    total_findings: number;
+    by_status: Record<string, number>;
+    by_severity: Record<string, number>;
+    by_type: Record<string, number>;
+    open_critical: number;
+}
+
+export interface AuditRunRequest {
+    project_id?: string;
+    include_ai_analysis?: boolean;
+}
+
+export interface AuditRunResponse {
+    audit_run_id: string;
+    organization_id: string;
+    project_id?: string;
+    archetype?: string;
+    started_at: string;
+    completed_at: string;
+    duration_seconds: number;
+    summary: {
+        total_findings: number;
+        gap_findings: number;
+        anomaly_findings: number;
+        ai_findings: number;
+        critical_count: number;
+        warning_count: number;
+        info_count: number;
+    };
+    findings: AuditFinding[];
+    persisted_count: number;
+}
+
+export interface FindingsResponse {
+    findings: AuditFinding[];
+    total: number;
+    limit: number;
+    offset: number;
+}
+

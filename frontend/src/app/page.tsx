@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { DashboardShell } from "@/components/dashboard/dashboard-shell"
+import { ArchetypeOnboarding } from "@/components/copilot/archetype-onboarding"
 import { api } from "@/lib/api"
 import type { User } from "@/types"
 
@@ -10,6 +11,8 @@ export default function Home() {
     const router = useRouter()
     const [user, setUser] = useState<User | null>(null)
     const [loading, setLoading] = useState(true)
+    const [showOnboarding, setShowOnboarding] = useState(false)
+    const [organizationName, setOrganizationName] = useState<string>("")
 
     useEffect(() => {
         const checkAuth = async () => {
@@ -21,6 +24,15 @@ export default function Home() {
             try {
                 const userData = await api.getMe()
                 setUser(userData)
+
+                // Check if organization has archetype set
+                const org = await api.getMyOrganization()
+                setOrganizationName(org.name)
+
+                if (!org.emission_archetype) {
+                    // Show onboarding for new organizations
+                    setShowOnboarding(true)
+                }
             } catch {
                 router.push("/login")
             } finally {
@@ -30,6 +42,10 @@ export default function Home() {
 
         checkAuth()
     }, [router])
+
+    const handleOnboardingComplete = () => {
+        setShowOnboarding(false)
+    }
 
     if (loading) {
         return (
@@ -43,9 +59,18 @@ export default function Home() {
     }
 
     return (
-        <DashboardShell
-            userName={user?.full_name}
-            organizationName={user?.organization?.name}
-        />
+        <>
+            <DashboardShell
+                userName={user?.full_name}
+                organizationName={user?.organization?.name}
+            />
+
+            <ArchetypeOnboarding
+                open={showOnboarding}
+                onComplete={handleOnboardingComplete}
+                organizationName={organizationName}
+            />
+        </>
     )
 }
+

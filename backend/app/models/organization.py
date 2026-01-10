@@ -21,6 +21,11 @@ class Organization(Base):
     industry = Column(String(100), nullable=True)
     country = Column(String(2), nullable=True)  # ISO 3166-1 Alpha-2
     
+    # Emission Archetype for auditor validation
+    # One of: digital_service, material_transformer, structure_builder, 
+    #         mover, land_steward, energy_producer, retailer
+    emission_archetype = Column(String(50), nullable=True)
+    
     # Configuration settings
     settings = Column(JSON, default={})
     

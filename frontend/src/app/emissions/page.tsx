@@ -240,6 +240,7 @@ export default function EmissionsPage() {
                                                 <TableHead>Type</TableHead>
                                                 <TableHead>Scope</TableHead>
                                                 <TableHead>Region</TableHead>
+                                                <TableHead>Emission Factor</TableHead>
                                                 <TableHead className="text-right">Emissions (kg CO₂e)</TableHead>
                                                 <TableHead>Date</TableHead>
                                             </TableRow>
@@ -247,6 +248,20 @@ export default function EmissionsPage() {
                                         <TableBody>
                                             {currentProject.activities.map((activity) => {
                                                 const ef = activity.input_data?.autopilot_response?.estimate?.emission_factor;
+                                                const activityData = activity.input_data?.autopilot_response?.estimate?.activity_data;
+                                                const co2e = Number(activity.co2e_kg);
+
+                                                // Calculate emission factor: co2e / activity_value
+                                                const calcEmissionFactor = (co2e: number, activityValue: number | undefined, activityUnit: string | undefined) => {
+                                                    if (!activityValue || activityValue === 0) return null;
+                                                    const factor = co2e / activityValue;
+                                                    return {
+                                                        value: factor.toFixed(4),
+                                                        unit: `kg CO₂e/${activityUnit || 'unit'}`
+                                                    };
+                                                };
+
+                                                const emissionFactor = calcEmissionFactor(co2e, activityData?.activity_value, activityData?.activity_unit);
 
                                                 return (
                                                     <TableRow key={activity.id} className="border-border">
@@ -276,8 +291,18 @@ export default function EmissionsPage() {
                                                                 {ef?.region || activity.region || "-"}
                                                             </span>
                                                         </TableCell>
+                                                        <TableCell>
+                                                            {emissionFactor ? (
+                                                                <div className="text-xs">
+                                                                    <div className="font-medium">{emissionFactor.value}</div>
+                                                                    <div className="text-muted-foreground">{emissionFactor.unit}</div>
+                                                                </div>
+                                                            ) : (
+                                                                <span className="text-muted-foreground text-xs">-</span>
+                                                            )}
+                                                        </TableCell>
                                                         <TableCell className="text-right font-medium">
-                                                            {formatNumber(Math.round(Number(activity.co2e_kg)))}
+                                                            {formatNumber(Math.round(co2e))}
                                                         </TableCell>
                                                         <TableCell className="text-muted-foreground">
                                                             {activity.activity_date ? formatDate(activity.activity_date) : "-"}

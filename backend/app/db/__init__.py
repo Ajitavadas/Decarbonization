@@ -10,6 +10,7 @@ from app.models.project import Project
 from app.models.activity import EmissionActivity
 from app.models.batch_job import BatchJob
 from app.models.custom_mapping import CustomMapping
+from app.models.flagged_event import FlaggedEvent
 
 __all__ = [
     "Base",
@@ -18,5 +19,6 @@ __all__ = [
     "Project",
     "EmissionActivity",
     "BatchJob",
-    "CustomMapping"
+    "CustomMapping",
+    "FlaggedEvent"
 ]

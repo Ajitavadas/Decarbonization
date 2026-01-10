@@ -1,0 +1,13 @@
+date,description,amount,unit
+2024-01-15,Office electricity consumption,5000,kWh
+2024-02-15,Office electricity consumption,5200,kWh
+2024-03-15,Office electricity consumption,4800,kWh
+2024-04-15,Office electricity consumption,15000,kWh
+2024-05-15,Office electricity consumption,4900,kWh
+2024-06-15,Office electricity consumption,5100,kWh
+2024-07-15,HVAC system - natural gas,2500,therms
+2024-08-15,HVAC system - natural gas,2400,therms
+2024-09-15,HVAC system - natural gas,0,therms
+2024-10-15,HVAC system - natural gas,2600,therms
+2024-11-15,HVAC system - natural gas,2700,therms
+2024-12-15,HVAC system - natural gas,3000,therms

@@ -23,6 +23,8 @@ class Settings(BaseSettings):
 
     # AI API
     MISTRAL_API_KEY: str = Field(..., description="Mistral AI API key")
+    GEMINI_API_KEY: str = Field(default="", description="Gemini AI API key for Auditor Agent")
+    GROQ_API_KEY: str = Field(default="", description="Groq AI API key for Auditor Agent")
     AI_MIN_CONFIDENCE_THRESHOLD: float = 0.7  # Minimum confidence for auto-approval
     
     # Database

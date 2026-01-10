@@ -1,0 +1,13 @@
+date,description,amount,unit,region
+2024-01-15,Office building electricity consumption,5000,kWh,US
+2024-02-15,Data center cooling system,2800,kWh,US
+2024-03-15,Natural gas for office heating,1500,therms,US
+2024-04-15,Diesel generator backup power,100,gallons,US
+2024-05-15,Company vehicle fleet gasoline,250,gallons,US
+2024-06-15,Business flight from LAX to NYC,2500,miles,US
+2024-07-15,Employee commute by car,1000,miles,US
+2024-08-15,Delivery truck diesel fuel,150,liters,US
+2024-09-15,Manufacturing process electricity,8000,kWh,US
+2024-10-15,Paper and office supplies purchased,500,USD,US
+2024-11-15,Car rental for business trip,300,miles,US
+2024-12-15,Waste disposal to landfill,2000,kg,US

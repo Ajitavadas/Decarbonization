@@ -1,0 +1,16 @@
+description,amount,unit,region,year,activity_date,category
+Office electricity - January,12500,kWh,US,2024,2024-01-15,electricity
+Office electricity - February,13200,kWh,US,2024,2024-02-15,electricity
+Office electricity - March,11800,kWh,US,2024,2024-03-15,electricity
+Office electricity - June MISSING APRIL AND MAY,14200,kWh,US,2024,2024-06-15,electricity
+Office electricity - July,15500,kWh,US,2024,2024-07-15,electricity
+Office electricity - August,15800,kWh,US,2024,2024-08-15,electricity
+Building heating natural gas - January,2500,therm,US,2024,2024-01-20,natural_gas
+Building heating natural gas - February,2800,therm,US,2024,2024-02-20,natural_gas
+Building heating natural gas - March,2200,therm,US,2024,2024-03-20,natural_gas
+ANOMALY - Summer heating natural gas July,2500,therm,US,2024,2024-07-20,natural_gas
+Delivery diesel fuel - January,1200,gallon,US,2024,2024-01-10,diesel
+Delivery diesel fuel - February,1150,gallon,US,2024,2024-02-10,diesel
+OUTLIER - Diesel fuel spike March,15000,gallon,US,2024,2024-03-10,diesel
+Delivery diesel fuel - April,1250,gallon,US,2024,2024-04-10,diesel
+Delivery diesel fuel - May,1400,gallon,US,2024,2024-05-10,diesel

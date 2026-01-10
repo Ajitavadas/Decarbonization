@@ -1,0 +1,11 @@
+date,description,amount,unit
+2024-01-10,Business flight LAX to NYC,2500,miles
+2024-02-20,Business flight LAX to Chicago,1750,miles
+2024-03-15,Business flight LAX to Seattle,960,miles
+2024-04-05,Taxi rides for client meetings,150,miles
+2024-05-10,Employee commute - car,500,miles
+2024-06-15,Delivery truck fuel,200,gallons
+2024-07-20,Company car fleet - gasoline,350,gallons
+2024-08-25,Forklift propane,100,gallons
+2024-09-30,Generator diesel,50,gallons
+2024-10-15,Data center backup generator,25,gallons

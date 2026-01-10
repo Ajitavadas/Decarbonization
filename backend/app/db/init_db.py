@@ -4,7 +4,7 @@ Database initialization and seed data
 
 from sqlalchemy.orm import Session
 from app.db.base import engine, Base
-from app.models import user, organization, project, activity, batch_job, custom_mapping
+from app.models import user, organization, project, activity, batch_job, custom_mapping, flagged_event, reduction_target, reduction_strategy, copilot_cache
 
 
 def init_db(db: Session) -> None:
