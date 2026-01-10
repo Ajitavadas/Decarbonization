@@ -703,12 +703,10 @@ class ReportGenerator:
 
         elements.append(KeepTogether([summary_heading, summary_table, Spacer(1, 20)]))
         
-        # Visualizations
-        elements.append(Paragraph("Emissions Analysis & Visualizations", heading_style))
-        
-        # Add charts
+        # Visualizations - keep heading and charts together
+        viz_heading = Paragraph("Emissions Analysis & Visualizations", heading_style)
         img = Image(viz_buffer, width=7*inch, height=5.25*inch)
-        elements.append(img)
+        elements.append(KeepTogether([viz_heading, Spacer(1, 12), img]))
         elements.append(PageBreak())
         
         # Activity Data by Scope
@@ -966,11 +964,11 @@ class ReportGenerator:
             
             elements.append(KeepTogether([summary_heading, summary_table, Spacer(1, 20)]))
         
-        # Visualizations (if enabled and buffer exists)
+        # Visualizations (if enabled and buffer exists) - keep heading and charts together
         if config.get('include_charts', True) and viz_buffer:
-            elements.append(Paragraph("Emissions Analysis & Visualizations", heading_style))
+            viz_heading = Paragraph("Emissions Analysis & Visualizations", heading_style)
             img = Image(viz_buffer, width=7*inch, height=5.25*inch)
-            elements.append(img)
+            elements.append(KeepTogether([viz_heading, Spacer(1, 12), img]))
             elements.append(PageBreak())
         
         # Custom Tables
