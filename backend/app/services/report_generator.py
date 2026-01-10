@@ -1165,41 +1165,95 @@ class ReportGenerator:
         return rows
     
     def _build_custom_combined_table(self, selected_columns: List[str]) -> tuple[List[str], List[List[str]]]:
-        """Build a combined table with any columns from the detailed activity list"""
-        # All available columns from the detailed activity list
-        available_columns = ["#", "Activity", "Type", "Scope", "Quantity", "Unit", "CO2e (kg)", 
-                           "Calc Method", "EF (kgCO2e/unit)", "Region", "Date", "Emission Source", 
-                           "Activity Data", "Activity Type", "Count", "kgCO2e per Unit", "Data Source",
-                           "CO2 (kg)", "CH4 (kg)", "N2O (kg)", "Other GHGs (kg)"]
-        
-        # Start with detailed activity rows as base
-        detailed_rows = self._build_detailed_activity_rows()
-        
-        # Map column names to row indices for detailed activities
-        detailed_columns = ["#", "Type", "Scope", "Quantity", "Unit", "CO2e (kg)", "Calc Method", "EF (kgCO2e/unit)", "Region", "Date"]
-        
-        # If no columns selected, return empty
-        if not selected_columns:
-            return available_columns, [available_columns]
-        
-        # Filter to only requested columns that exist
-        valid_columns = [col for col in selected_columns if col in available_columns]
-        
-        if not valid_columns:
-            return available_columns, [available_columns]
-        
-        # Build combined data: use detailed_rows as primary source
-        rows = [valid_columns]  # Header
-        
-        for activity_row in detailed_rows[1:]:  # Skip header row
-            new_row = []
-            for col in valid_columns:
-                if col in detailed_columns:
-                    idx = detailed_columns.index(col)
-                    new_row.append(activity_row[idx] if idx < len(activity_row) else 'N/A')
-                else:
-                    # For columns not in detailed list, try to extract from activities
-                    new_row.append('N/A')
-            rows.append(new_row)
-        
-        return valid_columns, rows
+        """Build a combined table that can include any available column per activity"""
+        # Canonical set of all supported columns (match frontend labels)
+        all_columns = [
+            "#", "Activity", "Activity Data", "Type", "Activity Type", "Scope", "Quantity", "Unit",
+            "CO2e (kg)", "Calc Method", "EF (kgCO2e/unit)", "kgCO2e per Unit", "Region", "Date",
+            "Emission Source", "Data Source", "Count", "CO2 (kg)", "CH4 (kg)", "N2O (kg)", "Other GHGs (kg)"
+        ]
+
+        # Helper to generate a per-activity mapping of column -> value
+        def build_activity_map(index: int, activity: Dict[str, Any]) -> Dict[str, str]:
+            co2e_value = float(activity.get('co2e_kg', 0) or 0)
+            quantity, unit = self._extract_quantity_unit(activity)
+            source_name, data_source = self._extract_emission_source(activity)
+
+            # Emission factor
+            ef_value = None
+            if quantity and quantity > 0:
+                try:
+                    ef_value = co2e_value / float(quantity)
+                except Exception:
+                    ef_value = None
+
+            # Constituent gases per activity
+            co2 = ch4 = n2o = other = None
+            input_data = activity.get('input_data', {}) if isinstance(activity.get('input_data', {}), dict) else {}
+            autopilot = input_data.get('autopilot_response', {}) if isinstance(input_data.get('autopilot_response', {}), dict) else {}
+            gas_breakdown = activity.get('constituent_gases')
+            if not gas_breakdown and autopilot:
+                gas_breakdown = autopilot.get('constituent_gases') or autopilot.get('constituentGases')
+                estimate = autopilot.get('estimate', {}) if isinstance(autopilot.get('estimate', {}), dict) else {}
+                if not gas_breakdown and estimate:
+                    gas_breakdown = estimate.get('constituent_gases') or estimate.get('constituentGases')
+            if isinstance(gas_breakdown, dict) and gas_breakdown:
+                try:
+                    co2 = float(gas_breakdown.get('co2', 0) or 0)
+                except Exception:
+                    co2 = None
+                try:
+                    ch4 = float(gas_breakdown.get('ch4', 0) or 0)
+                except Exception:
+                    ch4 = None
+                try:
+                    n2o = float(gas_breakdown.get('n2o', 0) or 0)
+                except Exception:
+                    n2o = None
+                other_total = 0.0
+                for gas_key, gas_val in gas_breakdown.items():
+                    if str(gas_key).lower() not in ['co2', 'co2e', 'ch4', 'n2o']:
+                        try:
+                            other_total += float(gas_val)
+                        except Exception:
+                            pass
+                other = other_total if other_total > 0 else None
+
+            # Map values
+            act_type_raw = activity.get('type') or 'Unknown'
+            act_type_display = str(act_type_raw).replace('_', ' ').title()
+            date_display = activity['date'][:10] if activity.get('date') and activity['date'] != 'N/A' else 'N/A'
+            quantity_display = f"{quantity:,.2f}" if quantity is not None else 'N/A'
+            ef_display = f"{ef_value:.6f}" if ef_value is not None else 'N/A'
+
+            return {
+                '#': str(index),
+                'Activity': act_type_display,
+                'Activity Data': quantity_display,
+                'Type': act_type_raw[:15] if isinstance(act_type_raw, str) else str(act_type_raw),
+                'Activity Type': act_type_display,
+                'Scope': activity.get('scope', 'Unknown'),
+                'Quantity': quantity_display,
+                'Unit': unit or 'N/A',
+                'CO2e (kg)': f"{co2e_value:,.2f}",
+                'Calc Method': (activity.get('calculation_method', 'N/A') or 'N/A')[:12],
+                'EF (kgCO2e/unit)': ef_display,
+                'kgCO2e per Unit': ef_display,
+                'Region': activity.get('region', 'N/A') or 'N/A',
+                'Date': date_display,
+                'Emission Source': source_name or 'Unknown',
+                'Data Source': data_source or 'Climatiq API',
+                'Count': '1',
+                'CO2 (kg)': f"{co2:,.3f}" if co2 is not None else 'N/A',
+                'CH4 (kg)': f"{ch4:,.3f}" if ch4 is not None else 'N/A',
+                'N2O (kg)': f"{n2o:,.3f}" if n2o is not None else 'N/A',
+                'Other GHGs (kg)': f"{other:,.3f}" if other is not None else 'N/A',
+            }
+
+        # Build full rows including header (all columns), filtering happens later
+        full_rows: List[List[str]] = [all_columns]
+        for i, activity in enumerate(self.activities, 1):
+            amap = build_activity_map(i, activity)
+            full_rows.append([amap.get(col, 'N/A') for col in all_columns])
+
+        return all_columns, full_rows
