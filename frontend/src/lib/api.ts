@@ -171,14 +171,16 @@ class ApiClient {
     }
 
     // Report endpoints
-    async downloadReport(projectId: string, format: 'pdf' | 'html'): Promise<Blob> {
-        // Use project-scoped report endpoint exposed by backend
+    async downloadReport(projectId: string, config?: any): Promise<Blob> {
+        // Backend now expects POST with optional configuration
         const token = this.getToken();
-        const response = await fetch(`${API_URL}/projects/${projectId}/report?format=${format}`, {
-            method: "GET",
+        const response = await fetch(`${API_URL}/projects/${projectId}/report`, {
+            method: "POST",
             headers: {
                 Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
             },
+            body: JSON.stringify(config || { format_type: "standard" }),
         });
 
         if (!response.ok) {
@@ -191,6 +193,10 @@ class ApiClient {
 
     async getReportSummary(projectId: string): Promise<any> {
         return this.request<any>(`/projects/${projectId}/report-summary`);
+    }
+
+    async getAvailableReportColumns(projectId: string): Promise<any> {
+        return this.request<any>(`/projects/${projectId}/report/available-columns`);
     }
 }
 
