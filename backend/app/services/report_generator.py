@@ -258,13 +258,13 @@ class ReportGenerator:
 
     def _build_activity_summary_rows(self) -> List[List[str]]:
         """Prepare rows for activity data summary grouped by scope"""
-        rows: List[List[str]] = [['Activity', 'Emission Source', 'Activity Data', 'Unit', 'Scope']]
+        rows: List[List[str]] = [['Activity Type', 'Emission Source', 'Activity Data', 'Unit', 'Scope']]
         sorted_activities = sorted(self.activities, key=lambda a: (self._scope_sort_key(a.get('scope', '')), -a.get('co2e_kg', 0)))
 
         for activity in sorted_activities:
             quantity, unit = self._extract_quantity_unit(activity)
             source_name, _ = self._extract_emission_source(activity)
-            activity_label = activity.get('type') or 'Unknown'
+            activity_label = (activity.get('type') or 'Unknown').replace('_', ' ').title()
             rows.append([
                 activity_label,
                 source_name,
@@ -1168,7 +1168,7 @@ class ReportGenerator:
         """Build a combined table that can include any available column per activity"""
         # Canonical set of all supported columns (match frontend labels)
         all_columns = [
-            "#", "Activity", "Activity Data", "Type", "Activity Type", "Scope", "Quantity", "Unit",
+            "#", "Activity Data", "Activity Type", "Scope", "Quantity", "Unit",
             "CO2e (kg)", "Calc Method", "EF (kgCO2e/unit)", "kgCO2e per Unit", "Region", "Date",
             "Emission Source", "Data Source", "Count", "CO2 (kg)", "CH4 (kg)", "N2O (kg)", "Other GHGs (kg)"
         ]
@@ -1228,9 +1228,7 @@ class ReportGenerator:
 
             return {
                 '#': str(index),
-                'Activity': act_type_display,
                 'Activity Data': quantity_display,
-                'Type': act_type_raw[:15] if isinstance(act_type_raw, str) else str(act_type_raw),
                 'Activity Type': act_type_display,
                 'Scope': activity.get('scope', 'Unknown'),
                 'Quantity': quantity_display,

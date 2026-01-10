@@ -160,7 +160,11 @@ export default function CustomReportPage() {
     Object.values(availableTables).forEach((table) => {
       table.columns.forEach((col) => allColumns.add(col));
     });
-    return Array.from(allColumns).sort();
+    // Remove redundant columns - Activity and Type are consolidated as Activity Type
+    const filtered = Array.from(allColumns)
+      .filter((col) => col !== 'Activity' && col !== 'Type')
+      .sort();
+    return filtered;
   };
 
   const handleAddAdditionalTable = () => {
