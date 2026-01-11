@@ -1,533 +1,365 @@
-# Decarbonization Platform - Implementation & Architecture
+# 🌍 Decarbonization Platform
 
-## 🌍 Overview
+**AI-Powered Carbon Accounting and Decarbonization Platform**
 
-This platform provides comprehensive carbon emissions calculation and management using the Climatiq API with intelligent AI-powered classification. The system automatically processes CSV uploads, classifies activities into GHG Protocol scopes, calculates CO2e emissions using optimal Climatiq endpoints, and stores results for frontend integration.
+A full-stack enterprise platform for tracking, analyzing, and reducing organizational carbon emissions. Built with FastAPI, Next.js, and PostgreSQL, featuring intelligent AI classification, real-time anomaly detection, and comprehensive PDF reporting.
+
+---
+
+## 🚀 Key Features
+
+### 📊 **Carbon Emissions Management**
+- **CSV Upload & Processing**: Bulk import activity data with automatic AI classification
+- **Multi-Scope Tracking**: Complete GHG Protocol Scope 1, 2, and 3 emissions tracking
+- **Real-time Calculations**: Climatiq API integration for accurate CO2e calculations
+- **Interactive Dashboard**: Visual analytics with charts, trends, and scope breakdowns
+
+### 🤖 **AI-Powered Intelligence**
+- **Smart Classification**: Groq/Gemini AI for automatic scope and category assignment
+- **Carbon Copilot**: Conversational AI assistant for emissions queries
+- **Anomaly Detection**: AI-driven identification of data gaps and outliers
+- **Strategy Generation**: AI-suggested reduction strategies based on your emissions profile
+
+### 📈 **Reduction Targets & Tracking**
+- **Target Setting**: Absolute and percentage-based reduction targets
+- **Progress Monitoring**: Real-time tracking against milestones
+- **Trajectory Analysis**: Predictive modeling for target achievement
+
+### 📋 **Professional Reporting**
+- **PDF Reports**: Beautifully formatted carbon footprint reports
+- **Custom Reports**: Configurable tables and columns
+- **Executive Summaries**: High-level insights for stakeholders
+
+### 🔒 **Enterprise Security**
+- **Multi-Organization Support**: Complete data isolation between organizations
+- **Role-Based Access**: Secure authentication with JWT tokens
+- **Project-Level Permissions**: Fine-grained access control
+
+---
 
 ## 🏗️ Architecture
 
-### **Core Components**
-
-1. **Backend API** (FastAPI + SQLAlchemy)
-   - RESTful endpoints for authentication, projects, activities, batch jobs
-   - Async processing with Celery for background tasks
-   - PostgreSQL database with comprehensive activity tracking
-
-2. **AI Classification Service** (Groq + Gemini + Heuristics)
-   - Multi-provider AI classification with fallbacks
-   - GHG Protocol scope assignment (Scope 1, 2, 3)
-   - 15+ Scope 3 subcategories with confidence scoring
-
-3. **Climatiq Integration** (Multi-Endpoint Strategy)
-   - Intelligent endpoint selection based on activity type
-   - 3-tier fallback strategy for maximum coverage
-   - Response structure handling for different API formats
-
-4. **Unit Normalization**
-   - Comprehensive unit type detection (energy, weight, volume, money, distance)
-   - Automatic conversion for API compatibility
-   - Case-insensitive matching with fallbacks
-
-## 🧠 AI Classification System
-
-### **Classification Strategy**
-
-```python
-# Multi-tier classification approach
-1. Groq (Llama-3.3-70b) - Primary: Fast, structured output
-2. Gemini - Secondary: Reliable backup  
-3. Heuristics - Tertiary: Rule-based fallback
 ```
-
-### **Scope Assignment Logic**
-
-- **Scope 1**: Direct emissions from owned assets
-  - Fuel combustion (natural gas, diesel, petrol)
-  - Company vehicles
-  - On-site heating/cooling
-
-- **Scope 2**: Indirect emissions from purchased energy
-  - Electricity consumption
-  - Purchased heating/steam
-  - Grid-connected energy
-
-- **Scope 3**: All other value chain emissions
-  - Business travel (air, car, rail)
-  - Procurement and purchased goods
-  - Waste disposal
-  - Employee commuting
-  - Investments
-
-### **Classification Output Format**
-
-```python
-# Returns tuple: (scope_number, confidence, needs_review)
-classification = await ai_classifier.classify_transaction(
-    description="Office electricity usage",
-    category="Energy", 
-    supplier_name=None
-)
-# Example: (2, 0.95, False) = Scope 2, 95% confidence
-```
-
-## ⚡ Climatiq Integration
-
-### **Smart Endpoint Selection**
-
-The system uses a 3-tier strategy for optimal CO2e calculation:
-
-#### **Strategy 1: Autopilot (AI-powered)**
-```json
-POST https://api.climatiq.io/estimate/v1/autopilot
-{
-  "text": "Office electricity usage",
-  "parameters": {
-    "energy": 2500.0,
-    "energy_unit": "kWh"
-  }
-}
-```
-
-#### **Strategy 2: Specific Endpoints**
-
-**Energy Endpoint** (Electricity)
-```json
-POST https://api.climatiq.io/energy/v1/electricity
-{
-  "year": 2026,
-  "region": "US", 
-  "amount": {
-    "energy": 2500.0,
-    "energy_unit": "kWh"
-  }
-}
-```
-
-**Fuel Endpoint** (Natural Gas)
-```json
-POST https://api.climatiq.io/energy/v1/fuel
-{
-  "fuel_type": "natural_gas",
-  "amount": {
-    "volume": 12436.05,
-    "volume_unit": "l"
-  },
-  "region": "US",
-  "year": 2026
-}
-```
-
-**Travel Endpoint** (Distance-based)
-```json
-POST https://preview.api.climatiq.io/travel/v1-preview1/distance
-{
-  "origin": {"query": "US"},
-  "destination": {"query": "US"},
-  "travel_mode": "air"
-}
-```
-
-**Procurement Endpoint** (Spend-based)
-```json
-POST https://api.climatiq.io/procurement/v1/spend/batch
-{
-  "activity": {
-    "classification_code": "25",
-    "classification_type": "isic4"
-  },
-  "spend_year": 2026,
-  "spend_region": "US",
-  "money": 2500.0,
-  "money_unit": "usd"
-}
-```
-
-#### **Strategy 3: Direct Estimate** (Fallback)
-```json
-POST https://api.climatiq.io/data/v1/estimate
-{
-  "emission_factor": {
-    "id": "electricity-supply_grid-source_production_mix",
-    "data_version": "20.20"
-  },
-  "parameters": {
-    "energy": 2500.0,
-    "energy_unit": "kWh"
-  }
-}
-```
-
-### **Response Structure Handling**
-
-Different endpoints return different JSON structures:
-
-```python
-def extract_co2e_from_response(result, endpoint_type):
-    if endpoint_type == "energy":
-        # Direct response: {"co2e": 91.62, "co2e_unit": "kg"}
-        return result["co2e"]
-    
-    elif endpoint_type == "fuel":
-        # Nested response: {"combustion": {"co2e": 837.55}}
-        return result["combustion"]["co2e"]
-    
-    elif endpoint_type == "procurement":
-        # Wrapped response: {"estimate": {"co2e": 631.17}}
-        return result["estimate"]["co2e"]
-    
-    elif endpoint_type == "travel":
-        # Direct response: {"co2e": 1397.05}
-        return result["co2e"]
-```
-
-## 📊 Unit Normalization
-
-### **Supported Unit Types**
-
-```python
-ENERGY_UNITS = ['kwh', 'mwh', 'gwh', 'wh', 'mj', 'gj', 'btu', 'therm', 'therms', 'mmbtu']
-WEIGHT_UNITS = ['kg', 't', 'ton', 'tonne', 'lb', 'lbs', 'g', 'gram', 'grams']
-VOLUME_UNITS = ['l', 'liter', 'liters', 'm3', 'm³', 'cubic meter', 'gal', 'gallon', 'gallons', 'ml', 'milliliter']
-MONEY_UNITS = ['eur', 'usd', 'gbp', 'chf', 'cad', 'aud', 'jpy', 'cny', 'inr', 'aed', 'sar', 'sek', 'nok', 'dkk']
-DISTANCE_UNITS = ['km', 'kilometer', 'kilometre', 'mile', 'miles', 'm', 'meter', 'metre']
-```
-
-### **Automatic Conversions**
-
-- **Natural Gas**: Therms → Liters (1 therm = 2.83L)
-- **MMBtu**: MMBtu → Liters (1 MMBtu = 28.3L)
-- **Currency**: Case normalization (USD → usd)
-
-## 🔄 Processing Workflow
-
-### **CSV Upload Process**
-
-1. **File Validation**
-   - CSV format verification
-   - Required columns: description, amount, unit, category, region, year, activity_date
-
-2. **Row Processing Loop**
-   ```python
-   for each row in CSV:
-       # Extract data
-       description = row["description"]
-       amount = float(row["amount"])
-       unit = normalize_unit(row["unit"])
-       
-       # AI Classification
-       scope, confidence, needs_review = await classify_transaction(description, category, supplier_name)
-       
-       # CO2e Calculation
-       co2e = await calculate_with_ai_suggestion(description, amount, unit, unit_type, region, year)
-       
-       # Database Storage
-       save_activity(description, co2e, scope, metadata)
-   ```
-
-3. **Batch Job Tracking**
-   - Real-time progress updates
-   - Success/failure counting
-   - Error logging with detailed messages
-
-## 📈 Real Calculation Examples
-
-### **Office Electricity (2500 kWh)**
-- **Classification**: Scope 2 (95% confidence)
-- **Endpoint**: Energy endpoint
-- **Payload**: `{"year": 2026, "region": "US", "amount": {"energy": 2500, "energy_unit": "kWh"}}`
-- **Response**: `{"co2e": 91.62, "co2e_unit": "kg"}`
-- **Result**: **91.62 kg CO2e**
-
-### **Business Travel (5000 km air)**
-- **Classification**: Scope 3 (98% confidence)
-- **Endpoint**: Travel endpoint  
-- **Payload**: `{"origin": {"query": "US"}, "destination": {"query": "US"}, "travel_mode": "air"}`
-- **Response**: `{"co2e": 1397.05, "co2e_unit": "kg"}`
-- **Result**: **1397.05 kg CO2e**
-
-### **Office Supplies ($2500)**
-- **Classification**: Scope 3 (90% confidence)
-- **Endpoint**: Procurement endpoint
-- **Payload**: `{"activity": {"classification_code": "25"}, "spend_year": 2026, "spend_region": "US", "money": 2500, "money_unit": "usd"}`
-- **Response**: `{"estimate": {"co2e": 631.17, "co2e_unit": "kg"}}`
-- **Result**: **631.17 kg CO2e**
-
-## 🗄️ Database Schema
-
-### **Core Tables**
-
-```sql
--- Projects
-CREATE TABLE projects (
-    id UUID PRIMARY KEY,
-    name VARCHAR,
-    description TEXT,
-    start_date DATE,
-    end_date DATE,
-    reporting_year INTEGER,
-    created_at TIMESTAMP
-);
-
--- Emission Activities  
-CREATE TABLE emission_activities (
-    id UUID PRIMARY KEY,
-    project_id UUID REFERENCES projects(id),
-    activity_type VARCHAR,
-    sub_type VARCHAR,
-    scope VARCHAR,
-    activity_date DATE,
-    co2e_kg NUMERIC(20, 6),
-    co2e_unit VARCHAR,
-    calculation_method VARCHAR,
-    input_data JSONB,
-    region VARCHAR,
-    year VARCHAR,
-    description TEXT,
-    created_at TIMESTAMP
-);
-
--- Batch Jobs
-CREATE TABLE batch_jobs (
-    id UUID PRIMARY KEY,
-    project_id UUID REFERENCES projects(id),
-    status VARCHAR,
-    total_records INTEGER,
-    processed_records INTEGER,
-    successful_records INTEGER,
-    failed_records INTEGER,
-    error_log JSONB,
-    created_at TIMESTAMP,
-    completed_at TIMESTAMP
-);
-```
-
-## 🚀 API Endpoints
-
-### **Authentication**
-```
-POST /api/v1/auth/register
-POST /api/v1/auth/login
-GET  /api/v1/auth/me
-```
-
-### **Projects**
-```
-POST /api/v1/projects
-GET  /api/v1/projects/{project_id}
-PUT  /api/v1/projects/{project_id}
-DELETE /api/v1/projects/{project_id}
-```
-
-### **Activities**
-```
-GET /api/v1/activities/?project_id={id}
-POST /api/v1/activities
-GET /api/v1/activities/{activity_id}
-PUT /api/v1/activities/{activity_id}
-DELETE /api/v1/activities/{activity_id}
-```
-
-### **Batch Processing**
-```
-POST /api/v1/upload/csv
-GET /api/v1/batch/jobs
-GET /api/v1/batch/jobs/{job_id}
-```
-
-### **Climatiq Integration**
-```
-POST /api/v1/energy/electricity
-POST /api/v1/energy/fuel
-POST /api/v1/travel/distance
-POST /api/v1/travel/spend
-POST /api/v1/procurement/calculate
-POST /api/v1/climatiq/autopilot
-```
-
-## ⚠️ Current Concerns & Considerations
-
-### **Known Issues**
-
-1. **Activity Description Handling**
-   - Some activities show `None` descriptions in database
-   - Affects frontend display and test script execution
-   - **Root Cause**: CSV parsing or data type conversion issues
-
-2. **API Rate Limiting**
-   - Climatiq API has rate limits (varies by plan)
-   - Current implementation lacks rate limit handling
-   - **Risk**: Failed calculations during high volume uploads
-
-3. **Error Recovery**
-   - Limited retry logic for failed API calls
-   - No exponential backoff for transient failures
-   - **Impact**: Reduced reliability for large datasets
-
-4. **Data Validation**
-   - Minimal input validation for edge cases
-   - No schema validation for Climatiq responses
-   - **Risk**: Data corruption or unexpected errors
-
-### **Performance Considerations**
-
-1. **Batch Processing**
-   - Current implementation processes rows sequentially
-   - Could benefit from parallel processing for large files
-   - **Optimization**: Async batch processing
-
-2. **Caching**
-   - No caching of emission factors or classifications
-   - Repeated calculations for similar activities
-   - **Opportunity**: Redis cache for common patterns
-
-3. **Database Optimization**
-   - Missing indexes on frequently queried fields
-   - JSONB queries could be optimized
-   - **Improvement**: Add GIN indexes on JSONB columns
-
-### **Security Considerations**
-
-1. **API Key Management**
-   - Climatiq API key stored in environment variables
-   - No key rotation mechanism
-   - **Best Practice**: Key vault integration
-
-2. **Input Sanitization**
-   - Limited validation of user inputs
-   - Potential SQL injection in complex queries
-   - **Recommendation**: Input validation middleware
-
-## 🔧 Configuration
-
-### **Environment Variables**
-
-```bash
-# Database
-DATABASE_URL=postgresql://user:pass@localhost/decarbonization
-
-# Climatiq API  
-CLIMATIQ_API_KEY=your_api_key_here
-CLIMATIQ_BASE_URL=https://api.climatiq.io
-
-# AI Services
-GROQ_API_KEY=your_groq_key
-GEMINI_API_KEY=your_gemini_key
-
-# Application
-SECRET_KEY=your_secret_key
-AI_MIN_CONFIDENCE_THRESHOLD=0.7
-```
-
-### **Docker Setup**
-
-```yaml
-version: '3.8'
-services:
-  backend:
-    build: ./backend
-    ports:
-      - "8000:8000"
-    environment:
-      - DATABASE_URL=postgresql://postgres:password@db:5432/decarbonization
-    depends_on:
-      - db
-      - redis
-      
-  db:
-    image: postgres:13
-    environment:
-      POSTGRES_DB: decarbonization
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      
-  redis:
-    image: redis:6-alpine
-    ports:
-      - "6379:6379"
-```
-
-## 🧪 Testing
-
-### **End-to-End Test Script**
-
-```python
-# test_end_to_end.py
-1. Health check
-2. Authentication
-3. CSV upload
-4. Batch job monitoring
-5. Activity verification
-6. CO2e calculation validation
-```
-
-### **Test Results Summary**
-
-✅ **Working Features:**
-- AI classification (Scope 1, 2, 3)
-- CO2e calculation (18,904.90 kg total)
-- Multi-endpoint Climatiq integration
-- Database storage and retrieval
-
-⚠️ **Areas for Improvement:**
-- Activity description handling
-- Error recovery mechanisms
-- Performance optimization
-- Enhanced validation
-
-## 🚀 Deployment
-
-### **Production Checklist**
-
-- [ ] Environment variables configured
-- [ ] Database migrations applied
-- [ ] SSL certificates installed
-- [ ] Rate limiting configured
-- [ ] Monitoring and logging setup
-- [ ] Backup procedures documented
-- [ ] API keys secured in vault
-- [ ] Load balancer configured
-- [ ] Health checks implemented
-
-## 📚 API Documentation
-
-### **Authentication Headers**
-```http
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
-```
-
-### **Response Format**
-```json
-{
-  "success": true,
-  "data": {...},
-  "message": "Operation completed",
-  "total_records": 5
-}
-```
-
-### **Error Format**
-```json
-{
-  "success": false,
-  "error": "Validation failed",
-  "details": {
-    "field": "amount",
-    "message": "Must be positive number"
-  }
-}
+┌─────────────────────────────────────────────────────────────────┐
+│                        Frontend (Next.js)                       │
+│  Dashboard │ Projects │ Emissions │ Targets │ Anomalies │ Reports│
+└─────────────────────────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     Backend API (FastAPI)                       │
+│  Auth │ Upload │ Activities │ Audit │ Targets │ Copilot │ Reports│
+└─────────────────────────────────────────────────────────────────┘
+         │                    │                         │
+         ▼                    ▼                         ▼
+┌─────────────┐    ┌──────────────────┐    ┌─────────────────────┐
+│  PostgreSQL │    │  Climatiq API    │    │  AI Services        │
+│  Database   │    │  (Emissions)     │    │  (Groq/Gemini)      │
+└─────────────┘    └──────────────────┘    └─────────────────────┘
+         │
+         ▼
+┌─────────────┐
+│   Redis     │
+│   (Cache)   │
+└─────────────┘
 ```
 
 ---
 
-## 🎯 Next Steps
+## 📦 Tech Stack
 
-1. **Fix Activity Descriptions**: Resolve `None` description issue
-2. **Add Rate Limiting**: Implement Climatiq API rate limit handling
-3. **Enhance Error Recovery**: Add retry logic with exponential backoff
-4. **Performance Optimization**: Implement batch processing and caching
-5. **Security Hardening**: Add input validation and API key rotation
-6. **Monitoring**: Add comprehensive logging and alerting
-7. **Frontend Integration**: Prepare API documentation for Next.js integration
+| Layer | Technology |
+|-------|------------|
+| **Frontend** | Next.js 14, TypeScript, Tailwind CSS, Recharts |
+| **Backend** | FastAPI, SQLAlchemy, Pydantic |
+| **Database** | PostgreSQL 16 |
+| **Cache** | Redis 7 |
+| **AI Services** | Groq (Llama-3.3-70b), Google Gemini |
+| **Emissions API** | Climatiq |
+| **PDF Generation** | ReportLab, Matplotlib |
+| **Containerization** | Docker, Docker Compose |
 
-This platform provides a robust foundation for carbon emissions management with intelligent classification and accurate CO2e calculations using industry-standard Climatiq API integration.
+---
+
+## 🛠️ Quick Start
+
+### Prerequisites
+
+- Docker & Docker Compose
+- API Keys: Climatiq, Groq (or Gemini)
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/Ajitavadas/Decarbonization.git
+cd Decarbonization
+```
+
+### 2. Configure Environment
+
+```bash
+# Backend configuration
+cp backend/.env.example backend/.env
+```
+
+Edit `backend/.env` with your API keys:
+
+```env
+# Required
+CLIMATIQ_API_KEY=your_climatiq_api_key
+GROQ_API_KEY=your_groq_api_key
+
+# Optional (fallback AI)
+GEMINI_API_KEY=your_gemini_api_key
+
+# Security
+SECRET_KEY=your_secret_key_here
+```
+
+### 3. Start the Platform
+
+```bash
+docker compose up -d
+```
+
+### 4. Access the Application
+
+| Service | URL |
+|---------|-----|
+| **Frontend** | http://localhost:3000 |
+| **Backend API** | http://localhost:8000 |
+| **API Docs** | http://localhost:8000/docs |
+
+---
+
+## 📚 API Endpoints
+
+### Authentication
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/auth/register` | Register new user |
+| POST | `/api/v1/auth/login` | Login and get JWT token |
+| GET | `/api/v1/auth/me` | Get current user info |
+
+### Projects
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/projects/` | List all projects |
+| POST | `/api/v1/projects/` | Create new project |
+| GET | `/api/v1/projects/{id}` | Get project details |
+
+### Activities & Emissions
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/upload/csv` | Upload CSV for processing |
+| GET | `/api/v1/activities/?project_id={id}` | List activities |
+| GET | `/api/v1/activities/project/{id}/summary` | Get emissions summary |
+
+### Carbon Auditor
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/audit/run` | Run audit analysis |
+| GET | `/api/v1/audit/findings` | Get audit findings |
+| PATCH | `/api/v1/audit/findings/{id}/resolve` | Resolve finding |
+
+### Reduction Targets
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/targets/` | List reduction targets |
+| POST | `/api/v1/targets/` | Create new target |
+| POST | `/api/v1/targets/{id}/strategies/generate` | Generate AI strategies |
+
+### Carbon Copilot
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/copilot/chat` | Chat with AI assistant |
+| GET | `/api/v1/copilot/quick-stats` | Get quick statistics |
+
+### Reports
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/projects/{id}/report` | Generate PDF report |
+| GET | `/api/v1/projects/{id}/report-summary` | Get report data |
+| GET | `/api/v1/projects/{id}/report/available-columns` | Get custom report options |
+
+---
+
+## 📊 CSV Upload Format
+
+Upload CSV files with the following columns:
+
+| Column | Required | Description | Example |
+|--------|----------|-------------|---------|
+| `description` | ✅ | Activity description | "Office electricity usage" |
+| `amount` | ✅ | Quantity value | 2500 |
+| `unit` | ✅ | Unit of measure | "kWh", "km", "USD" |
+| `category` | ❌ | Activity category | "Energy", "Travel" |
+| `region` | ❌ | Geographic region | "US", "EU", "IN" |
+| `activity_date` | ❌ | Date of activity | "2026-01-15" |
+
+### Example CSV
+
+```csv
+description,amount,unit,category,region,activity_date
+Office electricity usage,2500,kWh,Energy,US,2026-01-15
+Business flight NYC to LA,5000,km,Travel,US,2026-01-10
+Natural gas heating,150,therms,Energy,US,2026-01-20
+Office supplies purchase,2500,USD,Procurement,US,2026-01-12
+```
+
+---
+
+## 🧠 AI Classification
+
+The platform uses a multi-tier AI classification strategy:
+
+1. **Groq (Primary)**: Llama-3.3-70b for fast, structured classification
+2. **Gemini (Fallback)**: Google's Gemini as reliable backup
+3. **Heuristics (Final)**: Rule-based classification for edge cases
+
+### Scope Assignment
+
+| Scope | Description | Examples |
+|-------|-------------|----------|
+| **Scope 1** | Direct emissions | Fuel combustion, company vehicles |
+| **Scope 2** | Purchased energy | Electricity, heating |
+| **Scope 3** | Value chain | Business travel, procurement, waste |
+
+---
+
+## 🔧 Development
+
+### Running Locally (without Docker)
+
+```bash
+# Backend
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+
+# Frontend
+cd frontend
+npm install
+npm run dev
+```
+
+### Running Tests
+
+```bash
+# Backend tests
+docker compose exec backend pytest
+
+# Report generation tests
+docker compose exec backend pytest tests/test_report_generation.py -v
+```
+
+### Database Migrations
+
+```bash
+# Create migration
+docker compose exec backend alembic revision --autogenerate -m "description"
+
+# Apply migrations
+docker compose exec backend alembic upgrade head
+```
+
+---
+
+## 📁 Project Structure
+
+```
+Decarbonization/
+├── backend/
+│   ├── app/
+│   │   ├── api/v1/endpoints/    # API routes
+│   │   ├── core/                # Config, security, auth
+│   │   ├── crud/                # Database operations
+│   │   ├── db/                  # Database session
+│   │   ├── integration/         # Climatiq API client
+│   │   ├── models/              # SQLAlchemy models
+│   │   ├── schemas/             # Pydantic schemas
+│   │   ├── services/            # Business logic
+│   │   └── main.py              # FastAPI app
+│   ├── tests/
+│   ├── requirements.txt
+│   └── Dockerfile
+├── frontend/
+│   ├── src/
+│   │   ├── app/                 # Next.js pages
+│   │   ├── components/          # React components
+│   │   ├── lib/                 # API client, utilities
+│   │   └── types/               # TypeScript types
+│   ├── package.json
+│   └── Dockerfile
+├── docker-compose.yml
+└── README.md
+```
+
+---
+
+## 🎯 Frontend Pages
+
+| Page | Path | Description |
+|------|------|-------------|
+| Dashboard | `/` | Overview with metrics and charts |
+| Projects | `/projects` | Manage projects |
+| Upload | `/upload` | CSV file upload |
+| Emissions | `/emissions` | View all emissions data |
+| Scope Analysis | `/scope-analysis` | Detailed scope breakdown |
+| Targets | `/targets` | Reduction targets & strategies |
+| Anomalies | `/anomalies` | Audit findings & data quality |
+| Reports | `/reports` | Generate PDF reports |
+
+---
+
+## 🔐 Environment Variables
+
+### Backend (`backend/.env`)
+
+```env
+# Application
+APP_NAME=Decarbonization Platform
+ENVIRONMENT=development
+DEBUG=true
+SECRET_KEY=your-secret-key-here
+
+# Database
+DATABASE_URL=postgresql://carbon_user:carbon_password@postgres:5432/decarbonization_db
+
+# Redis
+REDIS_URL=redis://redis:6379/0
+
+# Climatiq API
+CLIMATIQ_API_KEY=your_climatiq_api_key
+
+# AI Services (at least one required)
+GROQ_API_KEY=your_groq_api_key
+GEMINI_API_KEY=your_gemini_api_key
+
+# CORS
+ALLOWED_ORIGINS=["http://localhost:3000"]
+```
+
+### Frontend (`frontend/.env.local`)
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+```
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+---
+
+## 📬 Support
+
+For questions and support, please open an issue on GitHub.

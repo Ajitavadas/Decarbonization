@@ -1,6 +1,0 @@
-description,amount,unit,category,region,activity_date
-Office electricity usage,2500,kWh,Electricity,US,2024-01-15
-Natural gas heating,150,therms,Energy,US,2024-02-10
-Business travel - air,5000,km,Travel,US,2024-03-05
-Office supplies spending,2500,usd,Procurement,US,2024-04-12
-Data center electricity,1800,kWh,Electricity,US,2024-05-20
