@@ -188,25 +188,6 @@ export default function ProjectDetailPage() {
                                 </span>
                             </Button>
                         </label>
-                        {activities.length > 0 && (
-                            <Button
-                                variant="outline"
-                                onClick={handleDownloadPdf}
-                                disabled={downloadingPdf}
-                            >
-                                {downloadingPdf ? (
-                                    <>
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Generating...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Download className="mr-2 h-4 w-4" />
-                                        Download PDF
-                                    </>
-                                )}
-                            </Button>
-                        )}
                     </div>
                 </div>
 
