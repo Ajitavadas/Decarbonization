@@ -36,7 +36,7 @@ const navItems = [
     { icon: Globe, label: "Scope Analysis", href: "/scope-analysis" },
     { icon: Target, label: "Reduction Targets", href: "/targets" },
     { icon: AlertTriangle, label: "Anomalies", href: "/anomalies" },
-    { icon: FileBarChart, label: "Reports", href: "/reports", disabled: true },
+    { icon: FileBarChart, label: "Reports", href: "/reports" },
 ]
 
 const bottomNavItems = [{ icon: Settings, label: "Settings", href: "/settings", disabled: true }]

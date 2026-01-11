@@ -12,6 +12,9 @@ RUN npm ci || npm install
 FROM base AS dev
 WORKDIR /app
 
+# Ensure healthcheck utilities are available
+RUN apk add --no-cache curl
+
 # Copy package files and install dependencies
 COPY package.json package-lock.json* ./
 RUN npm ci || npm install

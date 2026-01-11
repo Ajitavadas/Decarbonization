@@ -170,6 +170,35 @@ class ApiClient {
         await this.request(`/activities/${id}`, { method: "DELETE" });
     }
 
+    // Report endpoints
+    async downloadReport(projectId: string, config?: any): Promise<Blob> {
+        // Backend now expects POST with optional configuration
+        const token = this.getToken();
+        const response = await fetch(`${API_URL}/projects/${projectId}/report`, {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(config || { format_type: "standard" }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: "Report generation failed" }));
+            throw new Error(error.detail || "Report generation failed");
+        }
+
+        return response.blob();
+    }
+
+    async getReportSummary(projectId: string): Promise<any> {
+        return this.request<any>(`/projects/${projectId}/report-summary`);
+    }
+
+    async getAvailableReportColumns(projectId: string): Promise<any> {
+        return this.request<any>(`/projects/${projectId}/report/available-columns`);
+    }
+
     // Audit endpoints
     async runAudit(data?: { project_id?: string; include_ai_analysis?: boolean }): Promise<import("@/types").AuditRunResponse> {
         return this.request<import("@/types").AuditRunResponse>("/audit/run", {

@@ -1,11 +1,11 @@
-description,amount,unit,category,supplier_name,region,activity_date
-Quarterly electricity usage from main grid,8750,kWh,Electricity,Metro Power,US,2025-01-15
-Natural gas for office heating Q1,325,therms,Heating Fuel,Regional Gas,US,2025-01-25
-Diesel fuel for company delivery vans,620,gallons,Transportation,QuickFuel,US,2025-02-12
-Warehouse electricity consumption Q1,32000,kWh,Manufacturing,Metro Power,US,2025-02-20
-Business flight to partner meeting,1850,miles,Business Travel,United,US,2025-03-08
-Office natural gas for winter heating,180,therms,Heating Fuel,Regional Gas,US,2025-03-18
-Employee commute annual survey,12500,miles,Employee Commute,,US,2025-04-15
-Server room electricity consumption,21000,kWh,IT Services,Metro Power,US,2025-04-28
-Backup generator diesel fuel,250,gallons,Stationary Combustion,PetroMax,US,2025-05-15
-Rental car for sales conference,950,miles,Business Travel,Enterprise,US,2025-05-22
+description                               , amount, unit   , category             , supplier_name, region, activity_date
+Quarterly electricity usage from main grid,   8750, kWh    , Electricity          , Metro Power  , US    , 2025-01-15
+Natural gas for office heating Q1         ,    325, therms , Heating Fuel         , Regional Gas , US    , 2025-01-25
+Diesel fuel for company delivery vans     ,    620, gallons, Transportation       , QuickFuel    , US    , 2025-02-12
+Warehouse electricity consumption Q1      ,  32000, kWh    , Manufacturing        , Metro Power  , US    , 2025-02-20
+Business flight to partner meeting        ,   1850, miles  , Business Travel      , United       , US    , 2025-03-08
+Office natural gas for winter heating     ,    180, therms , Heating Fuel         , Regional Gas , US    , 2025-03-18
+Employee commute annual survey            ,  12500, miles  , Employee Commute     ,              , US    , 2025-04-15
+Server room electricity consumption       ,  21000, kWh    , IT Services          , Metro Power  , US    , 2025-04-28
+Backup generator diesel fuel              ,    250, gallons, Stationary Combustion, PetroMax     , US    , 2025-05-15
+Rental car for sales conference           ,    950, miles  , Business Travel      , Enterprise   , US    , 2025-05-22
