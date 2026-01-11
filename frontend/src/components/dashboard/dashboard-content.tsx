@@ -147,8 +147,11 @@ export function DashboardContent() {
         { name: "Scope 3", value: Math.round(data.scope3), color: "#eab308" },
     ].filter(d => d.value > 0) : []
 
-    // Recent batch jobs
-    const recentJobs = data?.batchJobs.filter(j => j.file_name).slice(0, 5) || []
+    // Recent batch jobs - sorted by date descending
+    const recentJobs = data?.batchJobs
+        .filter(j => j.file_name)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 5) || []
 
     return (
         <div className="space-y-6 p-6">

@@ -216,8 +216,13 @@ Example:
         if any(x in desc for x in ["fuel", "gas", "diesel", "petrol"]):
             return {"scope": "Scope 1", "scope3Category": None, "reasoning": "Stationary/Mobile Combustion (Heuristic)"}
 
-        if "flight" in desc or "travel" in desc:
+        # Business Travel - flights, trains, rental cars, taxis
+        if any(x in desc for x in ["flight", "travel", "train", "rail", "air", "airline", "taxi", "uber", "rental car", "business trip"]):
             return {"scope": "Scope 3", "scope3Category": "6 - Business Travel", "reasoning": "Business Travel (Heuristic)"}
+        
+        # Employee Commuting
+        if any(x in desc for x in ["commut", "metro", "subway", "bus pass", "employee transport"]):
+            return {"scope": "Scope 3", "scope3Category": "7 - Employee Commuting", "reasoning": "Employee Commuting (Heuristic)"}
 
         # Default
         return {"scope": "Scope 3", "scope3Category": "1 - Purchased Goods & Services", "reasoning": "Purchased Goods (Heuristic)"}

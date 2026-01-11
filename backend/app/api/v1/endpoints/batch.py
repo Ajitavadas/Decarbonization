@@ -84,3 +84,52 @@ async def cancel_batch_job(
     db.commit()
     
     return {"success": True, "message": "Job cancelled"}
+
+
+@router.post("/cleanup-stuck")
+async def cleanup_stuck_jobs(
+    timeout_hours: int = 1,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Mark jobs stuck in 'processing' status as failed.
+    
+    Jobs older than timeout_hours that are still 'processing' will be marked as failed.
+    This helps clean up jobs that got stuck due to worker crashes or other issues.
+    """
+    from datetime import datetime, timedelta
+    
+    # Get project IDs that belong to user's organization
+    org_project_ids = db.query(Project.id).filter(
+        Project.organization_id == current_user.organization_id
+    ).subquery()
+    
+    cutoff_time = datetime.utcnow() - timedelta(hours=timeout_hours)
+    
+    # Find stuck jobs
+    stuck_jobs = db.query(BatchJob).filter(
+        BatchJob.project_id.in_(org_project_ids),
+        BatchJob.status == "processing",
+        BatchJob.created_at < cutoff_time
+    ).all()
+    
+    cleaned_count = 0
+    for job in stuck_jobs:
+        job.status = "failed"
+        job.error_log = job.error_log or []
+        job.error_log.append({
+            "type": "timeout",
+            "message": f"Job marked as failed due to timeout (stuck for >{timeout_hours}h)",
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        cleaned_count += 1
+    
+    db.commit()
+    
+    return {
+        "success": True,
+        "cleaned_count": cleaned_count,
+        "message": f"Marked {cleaned_count} stuck jobs as failed"
+    }
+

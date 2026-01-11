@@ -369,6 +369,11 @@ Expected Activity Types: {', '.join(archetype_info.expected_activity_types)}
 Key Emission Signals: {', '.join(archetype_info.key_emission_signals)}
 """
         
+        # Handle None values safely
+        current_value_str = f"{target.current_value:,.0f} kg CO2e" if target.current_value else "Not calculated"
+        progress_str = f"{target.progress_percentage:.1f}%" if target.progress_percentage else "N/A"
+        baseline_value_str = f"{target.baseline_value:,.0f}" if target.baseline_value else "Unknown"
+        
         return f"""You are a Carbon Reduction Strategy Expert. Generate specific, actionable reduction strategies for this organization.
 
 {archetype_context}
@@ -377,10 +382,10 @@ Target Details:
 - Name: {target.name}
 - Type: {target.target_type} ({'percentage reduction' if target.is_percentage_target else 'absolute target'})
 - Scope: {target.scope or 'All scopes'}
-- Baseline ({target.baseline_year}): {target.baseline_value:,.0f} kg CO2e
+- Baseline ({target.baseline_year}): {baseline_value_str} kg CO2e
 - Target ({target.target_year}): {target.target_value}{'%' if target.is_percentage_target else ' kg CO2e'}
-- Current Emissions: {target.current_value:,.0f} kg CO2e if target.current_value else 'Not calculated'
-- Progress: {target.progress_percentage}% if target.progress_percentage else 'N/A'
+- Current Emissions: {current_value_str}
+- Progress: {progress_str}
 
 Generate {max_strategies} specific, prioritized reduction strategies tailored to this organization's archetype and target.
 

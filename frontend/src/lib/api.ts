@@ -295,6 +295,33 @@ class ApiClient {
             body: JSON.stringify({ status }),
         });
     }
+
+    // Copilot endpoints
+    async chatWithCopilot(message: string, history: { role: string; content: string; source?: string }[] = [], includeLlm: boolean = true): Promise<CopilotChatResponse> {
+        return this.request<CopilotChatResponse>("/copilot/chat", {
+            method: "POST",
+            body: JSON.stringify({
+                message,
+                history,
+                include_llm: includeLlm
+            }),
+        });
+    }
+
+    async getCopilotQuickStats(): Promise<CopilotQuickStat[]> {
+        return this.request<CopilotQuickStat[]>("/copilot/quick-stats");
+    }
+
+    async getTargetTrajectory(targetId: string): Promise<Record<string, unknown>> {
+        return this.request<Record<string, unknown>>(`/targets/${targetId}/trajectory`);
+    }
+
+    async getSuggestedBaseline(year?: number, scope?: string): Promise<{ suggested_baseline: number; confidence: string; data_completeness: number }> {
+        const params = new URLSearchParams();
+        if (year) params.append("year", year.toString());
+        if (scope) params.append("scope", scope);
+        return this.request(`/targets/suggest-baseline?${params.toString()}`);
+    }
 }
 
 // Type definitions for Reduction Targets
@@ -358,4 +385,28 @@ export interface ReductionStrategy {
     created_at: string;
 }
 
+// Copilot types
+export interface CopilotChatRequest {
+    message: string;
+    history?: { role: string; content: string; source?: string }[];
+    include_llm?: boolean;
+}
+
+export interface CopilotChatResponse {
+    text: string;
+    intent: string;
+    data: Record<string, unknown>;
+    source: "deterministic" | "llm" | "cache" | "error";
+    model: string | null;
+    suggestions: string[];
+}
+
+export interface CopilotQuickStat {
+    label: string;
+    value: string;
+    change: string | null;
+    trend: "positive" | "negative" | null;
+}
+
 export const api = new ApiClient();
+

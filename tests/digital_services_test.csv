@@ -1,0 +1,41 @@
+description,amount,unit,region,activity_date,category,year
+Office electricity - headquarters,15000,kWh,US,2025-01-15,Electricity,2025
+Office electricity - headquarters,14500,kWh,US,2025-02-15,Electricity,2025
+Office electricity - headquarters,13800,kWh,US,2025-03-15,Electricity,2025
+Office electricity - headquarters,12500,kWh,US,2025-04-15,Electricity,2025
+Office electricity - headquarters,14200,kWh,US,2025-05-15,Electricity,2025
+Cloud computing services AWS,8500,USD,US,2025-01-20,Cloud Services,2025
+Cloud computing services AWS,9200,USD,US,2025-02-20,Cloud Services,2025
+Cloud computing services AWS,9800,USD,US,2025-03-20,Cloud Services,2025
+Cloud computing services AWS,10500,USD,US,2025-04-20,Cloud Services,2025
+Cloud computing services AWS,11200,USD,US,2025-05-20,Cloud Services,2025
+Business flight NYC to San Francisco,2500,miles,US,2025-01-10,Business Travel,2025
+Business flight NYC to London,3450,miles,GB,2025-02-05,Business Travel,2025
+Business flight Chicago to Seattle,1750,miles,US,2025-03-12,Business Travel,2025
+Business flight Boston to Los Angeles,2600,miles,US,2025-04-08,Business Travel,2025
+Business flight NYC to Paris,3650,miles,FR,2025-05-15,Business Travel,2025
+Train travel Boston to NYC,215,miles,US,2025-01-22,Business Travel,2025
+Train travel Washington DC to NYC,225,miles,US,2025-02-18,Business Travel,2025
+Employee commute - subway passes,2500,USD,US,2025-01-31,Employee Commuting,2025
+Employee commute - subway passes,2500,USD,US,2025-02-28,Employee Commuting,2025
+Employee commute - subway passes,2500,USD,US,2025-03-31,Employee Commuting,2025
+Employee commute - subway passes,2500,USD,US,2025-04-30,Employee Commuting,2025
+Employee commute - subway passes,2500,USD,US,2025-05-31,Employee Commuting,2025
+Office supplies and equipment,12000,USD,US,2025-01-25,Purchased Goods,2025
+Office furniture procurement,25000,USD,US,2025-02-10,Capital Goods,2025
+IT equipment laptops,45000,USD,US,2025-03-05,Capital Goods,2025
+Software licenses SaaS subscriptions,35000,USD,US,2025-04-01,Purchased Goods,2025
+Catering and food services,8000,USD,US,2025-05-10,Purchased Goods,2025
+Natural gas heating office,500,therms,US,2025-01-15,Heating,2025
+Natural gas heating office,480,therms,US,2025-02-15,Heating,2025
+Natural gas heating office,350,therms,US,2025-03-15,Heating,2025
+Rental car business trip,150,miles,US,2025-02-20,Business Travel,2025
+Rental car business trip,200,miles,US,2025-04-25,Business Travel,2025
+Data center cooling electricity,5000,kWh,US,2025-01-20,Electricity,2025
+Data center cooling electricity,5200,kWh,US,2025-02-20,Electricity,2025
+Data center cooling electricity,5500,kWh,US,2025-03-20,Electricity,2025
+Data center cooling electricity,5800,kWh,US,2025-04-20,Electricity,2025
+Data center cooling electricity,6000,kWh,US,2025-05-20,Electricity,2025
+Waste disposal and recycling,1500,USD,US,2025-03-31,Waste,2025
+Water utility office,800,USD,US,2025-03-31,Water,2025
+Marketing materials printing,5000,USD,US,2025-04-15,Purchased Goods,2025

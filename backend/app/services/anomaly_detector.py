@@ -78,8 +78,125 @@ class AnomalyDetector:
         findings.extend(self._detect_statistical_outliers(activities))
         findings.extend(self._detect_implausible_values(activities))
         findings.extend(self._detect_scope_distribution_anomaly(activities, archetype))
+        findings.extend(self._detect_seasonal_anomalies(activities))
+        
+        # Filter out suppressed findings
+        findings = self._filter_suppressed(findings)
         
         return findings
+    
+    def _detect_seasonal_anomalies(
+        self,
+        activities: List[EmissionActivity]
+    ) -> List[Dict[str, Any]]:
+        """
+        Detect anomalies based on seasonal baselines.
+        
+        Flags activities that are significantly above or below the
+        expected P90/P10 for their activity type and month.
+        """
+        from app.models.activity_baseline import ActivityBaseline
+        
+        findings = []
+        month_names = ["", "January", "February", "March", "April", "May", "June",
+                       "July", "August", "September", "October", "November", "December"]
+        
+        for activity in activities:
+            if not activity.co2e_kg or not activity.activity_date:
+                continue
+            
+            month = activity.activity_date.month
+            
+            # Get baseline for this activity type and month
+            baseline = self.db.query(ActivityBaseline).filter(
+                ActivityBaseline.organization_id == self.organization_id,
+                ActivityBaseline.activity_type == activity.activity_type,
+                ActivityBaseline.month == month
+            ).first()
+            
+            if not baseline or baseline.sample_count < 3:
+                continue  # Not enough history
+            
+            value = float(activity.co2e_kg)
+            p90 = float(baseline.p90) if baseline.p90 else 0
+            p10 = float(baseline.p10) if baseline.p10 else 0
+            
+            # Check for unusually high values (>1.5x P90)
+            if p90 > 0 and value > p90 * 1.5:
+                input_data = activity.input_data or {}
+                findings.append({
+                    "flag_type": "seasonal_anomaly",
+                    "severity": "warning",
+                    "rule_id": "seasonal_above_p90",
+                    "title": f"{activity.activity_type.title()} unusually high for {month_names[month]}",
+                    "description": f"Activity has {value:,.0f} kg CO₂e, which is significantly above the typical range ({p10:,.0f} - {p90:,.0f} kg) for {month_names[month]}.",
+                    "recommendation": "Verify this activity data is correct. It may indicate a data entry error or unusual operational event.",
+                    "evidence": {
+                        "activity_id": str(activity.id),
+                        "activity_type": activity.activity_type,
+                        "month": month,
+                        "month_name": month_names[month],
+                        "value": round(value, 2),
+                        "expected_range": f"{p10:,.0f} - {p90:,.0f}",
+                        "baseline_samples": baseline.sample_count,
+                        "description": input_data.get("description", "")[:100]
+                    },
+                    "activity_id": activity.id
+                })
+            
+            # Check for unusually low values (<0.5x P10)
+            elif p10 > 0 and value < p10 * 0.5 and value > 0:
+                input_data = activity.input_data or {}
+                findings.append({
+                    "flag_type": "seasonal_anomaly",
+                    "severity": "info",
+                    "rule_id": "seasonal_below_p10",
+                    "title": f"{activity.activity_type.title()} unusually low for {month_names[month]}",
+                    "description": f"Activity has {value:,.0f} kg CO₂e, which is significantly below the typical range ({p10:,.0f} - {p90:,.0f} kg) for {month_names[month]}.",
+                    "recommendation": "This could be positive progress in emissions reduction, or it may indicate missing data. Please verify.",
+                    "evidence": {
+                        "activity_id": str(activity.id),
+                        "activity_type": activity.activity_type,
+                        "month": month,
+                        "month_name": month_names[month],
+                        "value": round(value, 2),
+                        "expected_range": f"{p10:,.0f} - {p90:,.0f}",
+                        "baseline_samples": baseline.sample_count,
+                        "description": input_data.get("description", "")[:100]
+                    },
+                    "activity_id": activity.id
+                })
+        
+        return findings
+    
+    def _filter_suppressed(self, findings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Filter out findings that match active suppression rules."""
+        from app.models.suppression_rule import SuppressionRule
+        from datetime import datetime
+        
+        # Get active suppression rules
+        rules = self.db.query(SuppressionRule).filter(
+            SuppressionRule.organization_id == self.organization_id,
+            SuppressionRule.is_active == True,
+            SuppressionRule.expires_at > datetime.utcnow()
+        ).all()
+        
+        if not rules:
+            return findings
+        
+        filtered = []
+        for finding in findings:
+            is_suppressed = False
+            for rule in rules:
+                if rule.matches(finding):
+                    logger.debug(f"Suppressing finding {finding.get('rule_id')} due to rule {rule.id}")
+                    is_suppressed = True
+                    break
+            
+            if not is_suppressed:
+                filtered.append(finding)
+        
+        return filtered
     
     def _detect_zero_values(
         self,

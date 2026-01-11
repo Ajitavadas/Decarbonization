@@ -1,0 +1,146 @@
+
+======================================================================
+🌍 END-TO-END PRODUCTION TEST: Digital Services Archetype
+======================================================================
+
+======================================================================
+🔹 Step 1: Registering New User
+======================================================================
+✅ Registered: sustainability.analyst.61841@techcorp.test
+   User ID: 61c30c0d-53fb-465e-bb9c-cf4de4020ea8
+   Organization ID: None
+
+======================================================================
+🔹 Step 2: Configuring Organization (Digital Services Archetype)
+======================================================================
+✅ Organization updated:
+   Name: TechCorp Solutions 61841
+   Industry: Technology
+   Archetype: digital_service ✅
+
+======================================================================
+🔹 Step 3: Creating Project
+======================================================================
+✅ Project created: 2025 Carbon Footprint - TechCorp
+   Project ID: 3b10ea06-09e7-41dd-9393-fcc40163e162
+
+======================================================================
+🔹 Step 4: Uploading Activity Data CSV
+======================================================================
+✅ Upload successful!
+   Total records: 40
+   Status: completed
+   ⏳ Waiting for calculations...
+
+======================================================================
+🔹 Step 5: Verifying Calculated Emissions
+======================================================================
+
+📊 Total Activities Calculated: 40
+
+📋 Scope Breakdown:
+   Scope 1: 7,062.52 kg CO₂e
+   Scope 2: 37,625.03 kg CO₂e
+   Scope 3: 28,470.95 kg CO₂e
+
+📋 Activity Type Breakdown:
+   electricity: 36,600.23 kg CO₂e
+   procurement: 24,159.34 kg CO₂e
+   stationary_combustion: 7,062.52 kg CO₂e
+   business_travel: 5,251.90 kg CO₂e
+   transportation: 84.52 kg CO₂e
+
+📈 Total Emissions: 73,158.50 kg CO₂e
+
+======================================================================
+🔹 Step 6: Checking Anomaly Detection
+======================================================================
+⚠️ Audit response: {"error":"ValidationError","message":"Request validation failed","details":[{"type":"missing","loc":["body"],"msg":"Field required","input":null,"url":"https://errors.pydantic.dev/2.5/v/missing"}],"path":"http://localhost:8000/api/v1/audit/run"}
+
+======================================================================
+🔹 Step 7: Creating Reduction Target
+======================================================================
+✅ Target created: Net Zero 2030
+   Baseline (2025): 73,159 kg CO₂e
+   Target (2030): 50.0% reduction
+
+======================================================================
+🔹 Step 8: Carbon Copilot - Sustainability Analyst Roleplay
+======================================================================
+
+💬 [1] Analyst asks: "What are my total emissions?"
+   🤖 Copilot [llm/llama-3.1-8b-instant] (intent: total_emissions):
+   "Based on the provided data, the total emissions for TechCorp Solutions 61841 are 73,159 kg CO₂e. This is a significant portion of emissions, primarily driven by Scope 2 emissions, which account for 51.3% of the total emissions (37625.034652 kg CO₂e). As a digital service company, it's essential to focus on reducing Scope 2 emissions, which are likely related to electricity consumption."
+   ✅ RAG: Archetype info included (The Digital Service)
+   ✅ RAG: Org profile included (Technology)
+
+💬 [2] Analyst asks: "Show me my scope breakdown"
+   🤖 Copilot [llm/llama-3.1-8b-instant] (intent: scope_breakdown):
+   "Based on the provided data, the scope breakdown for TechCorp Solutions 61841 is as follows:
+
+- Scope 1: 7,062.52 kg CO₂e (approximately 9.7% of total emissions)
+- Scope 2: 37,625.03 kg CO₂e (approximately 51.4% of total emissions)
+- Scope 3: 28,470.95 kg CO₂e (approximately 38.9% of total emissions)
+
+As a digital service company, the majority of emissions (approximately 90.3%) are attributed to Scope 2 (electricity) and Scope 3 (indirect emissions from business activities). This is consistent wi..."
+   ✅ RAG: Archetype info included (The Digital Service)
+   ✅ RAG: Org profile included (Technology)
+
+💬 [3] Analyst asks: "What are my biggest emission sources?"
+   🤖 Copilot [deterministic/None] (intent: unknown):
+   "Your total emissions are 73,159 kg CO₂e."
+   ✅ RAG: Archetype info included (The Digital Service)
+   ✅ RAG: Org profile included (Technology)
+
+💬 [4] Analyst asks: "Am I on track for my 2030 net zero target?"
+   🤖 Copilot [llm/llama-3.1-8b-instant] (intent: target_progress):
+   "Based on the provided data, you are not on track to meet your 2030 net zero target. As of now, you have 0% completion, and your status is "off_track." Given your industry archetype, digital service, and expected scope distribution (Scope 1: 0.05, Scope 2: 0.25, Scope 3: 0.7), a significant portion of your emissions come from Scope 3 sources, which are harder to control and reduce. To get back on track, you'll need to reassess your emissions sources and develop a comprehensive plan to reduce your..."
+   ✅ RAG: Archetype info included (The Digital Service)
+   ✅ RAG: Org profile included (Technology)
+
+💬 [5] Analyst asks: "How can I reduce emissions as a tech company?"
+   🤖 Copilot [llm/llama-3.1-8b-instant] (intent: suggest):
+   "As a tech company, reducing emissions requires a multi-faceted approach. Based on the provided data, the top sources of emissions are electricity (50%), procurement (33%), and stationary combustion (9.7%). To reduce emissions, consider implementing energy-efficient practices, such as optimizing office electricity usage, and exploring renewable energy options. Additionally, reviewing procurement processes to identify opportunities for sustainable sourcing can also make a significant impact, given..."
+   ✅ RAG: Archetype info included (The Digital Service)
+   ✅ RAG: Org profile included (Technology)
+
+💬 [6] Analyst asks: "What anomalies should I investigate?"
+   🤖 Copilot [llm/llama-3.1-8b-instant] (intent: suggest):
+   "Based on the provided data, I recommend investigating the following anomalies:
+
+1. **High electricity emissions**: The electricity source accounts for 50% of the total emissions (36,600.23 kg CO₂e), which is significantly higher than the expected Scope 2 emissions (25% of total emissions). This suggests that TechCorp Solutions 61841 may have a high energy consumption or inefficient energy usage in their operations.
+2. **High procurement emissions**: Procurement emissions account for 33% of the t..."
+   ✅ RAG: Archetype info included (The Digital Service)
+   ✅ RAG: Org profile included (Technology)
+
+======================================================================
+🔹 TEST COMPLETE - SUMMARY
+======================================================================
+
+📊 Test Results:
+   User: sustainability.analyst.61841@techcorp.test
+   Organization: TechCorp Solutions 61841
+   Archetype: Digital Services
+   
+   Activities Uploaded: 40
+   Total Emissions: 73,158.50 kg CO₂e
+   
+   Scope Distribution:
+
+      Scope 1: 9.7%
+      Scope 2: 51.4%
+      Scope 3: 38.9%
+
+   Expected for Digital Services:
+      Scope 1: ~5%
+      Scope 2: ~25%
+      Scope 3: ~70%
+      
+🔗 Login to verify in UI:
+   URL: http://localhost:3000
+   Email: sustainability.analyst.61841@techcorp.test
+   Password: SustainTest2025!
+
+✅ Credentials saved to test_credentials.txt
+======================================================================
+

@@ -12,6 +12,8 @@ from app.models.flagged_event import FlaggedEvent
 from app.models.reduction_target import ReductionTarget
 from app.models.reduction_strategy import ReductionStrategy
 from app.models.copilot_cache import CopilotCache
+from app.models.activity_baseline import ActivityBaseline
+from app.models.suppression_rule import SuppressionRule
 
 __all__ = [
     "User", 
@@ -24,5 +26,7 @@ __all__ = [
     "ReductionTarget",
     "ReductionStrategy",
     "CopilotCache",
+    "ActivityBaseline",
+    "SuppressionRule",
 ]
 

@@ -163,6 +163,71 @@ async def get_targets(
     return [_target_to_response(t) for t in targets]
 
 
+# NOTE: This route MUST come before /{target_id} or it will be captured by UUID pattern
+@router.get("/suggest-baseline")
+async def suggest_baseline(
+    scope: Optional[str] = Query("all", description="Scope to calculate baseline for"),
+    year: Optional[int] = Query(None, description="Year to use for baseline (defaults to last year)"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Suggest a baseline value based on historical emissions.
+    
+    100% deterministic - NO LLM calls.
+    
+    Returns suggested baseline with confidence level based on data completeness.
+    User should always be able to override with their own value.
+    """
+    from sqlalchemy import func, extract
+    from app.models.activity import EmissionActivity
+    from app.models.project import Project
+    from datetime import datetime
+    
+    # Default to previous year
+    if year is None:
+        year = datetime.now().year - 1
+    
+    # Calculate total emissions for the year
+    query = db.query(func.sum(EmissionActivity.co2e_kg)).join(Project).filter(
+        Project.organization_id == current_user.organization_id,
+        extract('year', EmissionActivity.activity_date) == year
+    )
+    
+    if scope and scope != "all":
+        query = query.filter(EmissionActivity.scope == scope)
+    
+    total = query.scalar()
+    
+    # Calculate data completeness (months with data / 12)
+    months_with_data = db.query(
+        func.count(func.distinct(func.date_trunc('month', EmissionActivity.activity_date)))
+    ).join(Project).filter(
+        Project.organization_id == current_user.organization_id,
+        extract('year', EmissionActivity.activity_date) == year
+    ).scalar() or 0
+    
+    completeness = (months_with_data / 12) * 100
+    
+    # Determine confidence
+    if completeness >= 90:
+        confidence = "high"
+    elif completeness >= 60:
+        confidence = "medium"
+    else:
+        confidence = "low"
+    
+    return {
+        "suggested_baseline": float(total) if total else 0,
+        "year": year,
+        "data_completeness": round(completeness, 1),
+        "confidence": confidence,
+        "can_override": True,
+        "months_with_data": months_with_data,
+        "message": f"Based on {months_with_data} months of data from {year}" if total else f"No emission data found for {year}"
+    }
+
+
 @router.get("/{target_id}", response_model=TargetResponse)
 async def get_target(
     target_id: UUID,
@@ -242,6 +307,61 @@ async def calculate_all_progress(
     service = create_reduction_service(db, current_user.organization_id)
     updated_count = service.update_all_targets_progress()
     return {"message": f"Updated progress for {updated_count} targets"}
+
+
+# ========== Trajectory & Baseline Endpoints (NEW) ==========
+
+class TrajectoryResponse(BaseModel):
+    """Trajectory prediction response"""
+    status: str
+    confidence: str
+    message: str
+    projection: Optional[dict] = None
+    trend: Optional[dict] = None
+    action_required: Optional[dict] = None
+    historical: Optional[dict] = None
+
+
+class BaselineSuggestionResponse(BaseModel):
+    """Baseline suggestion response"""
+    suggested_baseline: float
+    year: int
+    data_completeness: float
+    confidence: str
+    can_override: bool = True
+
+
+@router.get("/{target_id}/trajectory", response_model=TrajectoryResponse)
+async def get_target_trajectory(
+    target_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get trajectory prediction for a reduction target.
+    
+    Uses linear regression on historical emissions to project whether
+    the target will be achieved at the current rate.
+    
+    100% deterministic - NO LLM calls.
+    
+    Confidence levels:
+    - high: R² > 0.7 (strong linear trend)
+    - medium: R² 0.4-0.7 (moderate trend)
+    - low: R² < 0.4 (unstable pattern)
+    """
+    from app.services.trajectory_service import create_trajectory_service
+    
+    service = create_reduction_service(db, current_user.organization_id)
+    target = service.get_target(target_id)
+    
+    if not target:
+        raise HTTPException(status_code=404, detail="Target not found")
+    
+    trajectory_service = create_trajectory_service(db, current_user.organization_id)
+    prediction = trajectory_service.predict(target)
+    
+    return TrajectoryResponse(**prediction)
 
 
 # ========== Strategy Endpoints ==========
