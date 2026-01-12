@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     CLIMATIQ_API_KEY: str = Field(..., description="Climatiq API authentication key")
     CLIMATIQ_BASE_URL: str = "https://api.climatiq.io"
     CLIMATIQ_PREVIEW_URL: str = "https://preview.api.climatiq.io"
-    CLIMATIQ_DATA_VERSION: str = "^28"  # Use latest 28.x version
+    CLIMATIQ_DATA_VERSION: str = "29.29"  # Use specific version 29.29
 
     # AI API
     MISTRAL_API_KEY: str = Field(..., description="Mistral AI API key")

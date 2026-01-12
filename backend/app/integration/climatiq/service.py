@@ -206,7 +206,7 @@ class ClimatiqService:
                     "emission_factor": {
                         "activity_id": "fuel-type_natural_gas-fuel_use_stationary",
                         "region": region or "US",
-                        "data_version": "^20"
+                        "data_version": settings.CLIMATIQ_DATA_VERSION
                     },
                     "parameters": {
                         "energy": energy_amount,
@@ -405,7 +405,7 @@ class ClimatiqService:
                         "emission_factor": {
                             "activity_id": activity_id,
                             "region": "GB",  # BEIS factors for flights
-                            "data_version": "^20"
+                            "data_version": settings.CLIMATIQ_DATA_VERSION
                         },
                         "parameters": {
                             "passengers": 1,  # Assuming 1 passenger per business trip
@@ -455,7 +455,7 @@ class ClimatiqService:
                     "emission_factor": {
                         "activity_id": activity_id,
                         "region": region or "US",
-                        "data_version": "^20"  # Use latest 20.x version
+                        "data_version": settings.CLIMATIQ_DATA_VERSION
                     },
                     "parameters": {
                         "distance": float(amount),
@@ -522,7 +522,7 @@ class ClimatiqService:
             # Search for emission factors first
             search_params = {
                 "query": text,
-                "data_version": "20.20",
+                "data_version": settings.CLIMATIQ_DATA_VERSION,
                 "limit": 5
             }
             if region:
@@ -542,7 +542,7 @@ class ClimatiqService:
                 estimate_payload = {
                     "emission_factor": {
                         "id": activity_id,
-                        "data_version": "20.20"
+                        "data_version": settings.CLIMATIQ_DATA_VERSION
                     },
                     "parameters": {}
                 }
@@ -664,3 +664,566 @@ class ClimatiqService:
         
         # Default to free text query
         return {"query": location_str}
+    
+    async def calculate_with_classification(
+        self,
+        classification: Dict[str, Any],
+        amount: float,
+        unit: str,
+        region: Optional[str] = None,
+        year: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Calculate emissions using AI classification to route to correct endpoint.
+        
+        Args:
+            classification: AI classification result containing:
+                - endpoint: The endpoint to use
+                - parameter_type: Type of parameter
+                - fuel_type: (optional) For fuel endpoint
+                - activity_search: Keywords to search for activity_id
+                - normalized_description: For autopilot
+            amount: Activity amount
+            unit: Unit of measurement
+            region: Geographic region
+            year: Year of activity
+            
+        Returns:
+            Emission calculation result with co2e
+        """
+        endpoint = classification.get("endpoint", "autopilot")
+        param_type = classification.get("parameter_type", "weight")
+        fuel_type = classification.get("fuel_type")
+        activity_search = classification.get("activity_search", "")
+        normalized_desc = classification.get("normalized_description", "")
+        
+        year = year or datetime.now().year
+        region = region or "US"
+        
+        print(f"DEBUG - Using endpoint: {endpoint}, param_type: {param_type}, search: {activity_search}")
+        
+        try:
+            # Route to appropriate endpoint
+            if endpoint == "fuel":
+                return await self._calculate_fuel(fuel_type, amount, unit, param_type, region, year)
+            
+            elif endpoint == "electricity":
+                return await self._calculate_electricity(amount, unit, region, year)
+            
+            elif endpoint == "heat_steam":
+                return await self._calculate_heat_steam(amount, unit, region, year)
+            
+            elif endpoint == "estimate":
+                return await self._calculate_estimate(activity_search, amount, unit, param_type, region, year)
+            
+            elif endpoint == "freight":
+                return await self._calculate_freight(activity_search, amount, unit, region, year)
+            
+            else:  # autopilot
+                return await self._calculate_autopilot(normalized_desc, amount, unit, param_type, region, year)
+                
+        except Exception as e:
+            print(f"DEBUG - Endpoint {endpoint} failed: {e}, falling back to autopilot")
+            # Fallback to autopilot
+            try:
+                return await self._calculate_autopilot(normalized_desc, amount, unit, param_type, region, year)
+            except Exception as e2:
+                print(f"DEBUG - Autopilot fallback also failed: {e2}")
+                return {
+                    "estimate": {"co2e": 0, "co2e_unit": "kg", "error": str(e)},
+                    "endpoint_type": "error"
+                }
+    
+    async def _calculate_fuel(
+        self,
+        fuel_type: str,
+        amount: float,
+        unit: str,
+        param_type: str,
+        region: str,
+        year: int
+    ) -> Dict[str, Any]:
+        """Calculate emissions using the fuel endpoint"""
+        
+        # Map common fuel types to Climatiq values
+        fuel_type_map = {
+            "diesel": "diesel",
+            "lpg": "lpg",
+            "natural_gas": "natural_gas",
+            "motor_gasoline": "motor_gasoline",
+            "petrol": "motor_gasoline",
+            "gasoline": "motor_gasoline",
+            "propane": "lpg"
+        }
+        
+        mapped_fuel = fuel_type_map.get(fuel_type, "diesel")
+        
+        # Build amount based on parameter type
+        if param_type == "volume":
+            # Normalize volume unit
+            unit_lower = unit.lower()
+            if unit_lower in ['gal', 'gallon', 'gallons']:
+                volume = float(amount) * 3.78541  # Convert to liters
+                volume_unit = "l"
+            elif unit_lower in ['m3', 'm³']:
+                volume = float(amount) * 1000  # Convert to liters
+                volume_unit = "l"
+            else:
+                volume = float(amount)
+                volume_unit = "l"
+            
+            fuel_payload = {
+                "fuel_type": mapped_fuel,
+                "amount": {
+                    "volume": volume,
+                    "volume_unit": volume_unit
+                },
+                "region": region,
+                "year": year
+            }
+        
+        elif param_type == "energy":
+            # Fuel by energy (e.g., natural gas in kWh)
+            unit_lower = unit.lower()
+            if unit_lower in ['therm', 'therms']:
+                energy = float(amount) * 29.3  # Convert to kWh
+                energy_unit = "kWh"
+            elif unit_lower == 'mmbtu':
+                energy = float(amount) * 293.07  # Convert to kWh
+                energy_unit = "kWh"
+            elif unit_lower == 'gj':
+                energy = float(amount) * 277.78  # Convert to kWh
+                energy_unit = "kWh"
+            else:
+                energy = float(amount)
+                energy_unit = unit if unit.lower() in ['kwh', 'mwh'] else 'kWh'
+            
+            fuel_payload = {
+                "fuel_type": mapped_fuel,
+                "amount": {
+                    "energy": energy,
+                    "energy_unit": energy_unit
+                },
+                "region": region,
+                "year": year
+            }
+        
+        elif param_type == "weight":
+            # Fuel by weight (e.g., LPG in kg)
+            weight = float(amount)
+            unit_lower = unit.lower()
+            if unit_lower in ['tonne', 'tonnes', 't', 'ton', 'tons']:
+                weight = weight * 1000  # Convert to kg
+            weight_unit = "kg"
+            
+            fuel_payload = {
+                "fuel_type": mapped_fuel,
+                "amount": {
+                    "weight": weight,
+                    "weight_unit": weight_unit
+                },
+                "region": region,
+                "year": year
+            }
+        
+        else:
+            # Default to volume
+            fuel_payload = {
+                "fuel_type": mapped_fuel,
+                "amount": {
+                    "volume": float(amount),
+                    "volume_unit": "l"
+                },
+                "region": region,
+                "year": year
+            }
+        
+        print(f"DEBUG - Fuel payload: {fuel_payload}")
+        result = await self.client.fuel(fuel_payload)
+        
+        # Extract CO2e from fuel response
+        co2e = result.get("combustion", {}).get("co2e", 0)
+        
+        return {
+            "estimate": {
+                "co2e": co2e,
+                "co2e_unit": "kg",
+                "emission_factor": result.get("combustion", {}).get("emission_factor", {}),
+                "activity_data": {
+                    "activity_value": float(amount),
+                    "activity_unit": unit
+                }
+            },
+            "endpoint_type": "fuel"
+        }
+    
+    async def _calculate_electricity(
+        self,
+        amount: float,
+        unit: str,
+        region: str,
+        year: int
+    ) -> Dict[str, Any]:
+        """Calculate emissions using the electricity endpoint"""
+        
+        # Normalize energy unit
+        unit_lower = unit.lower()
+        if unit_lower == 'mwh':
+            energy = float(amount) * 1000  # Convert to kWh
+            energy_unit = "kWh"
+        elif unit_lower == 'gwh':
+            energy = float(amount) * 1000000  # Convert to kWh
+            energy_unit = "kWh"
+        else:
+            energy = float(amount)
+            energy_unit = "kWh"
+        
+        electricity_payload = {
+            "year": year,
+            "region": region,
+            "amount": {
+                "energy": energy,
+                "energy_unit": energy_unit
+            }
+        }
+        
+        print(f"DEBUG - Electricity payload: {electricity_payload}")
+        result = await self.client.electricity(electricity_payload)
+        
+        # Extract CO2e from electricity response
+        co2e = 0
+        if "location" in result and "consumption" in result["location"]:
+            co2e = result["location"]["consumption"].get("co2e", 0)
+        elif "co2e" in result:
+            co2e = result.get("co2e", 0)
+        
+        return {
+            "estimate": {
+                "co2e": co2e,
+                "co2e_unit": "kg",
+                "emission_factor": result.get("emission_factor", {}),
+                "activity_data": {
+                    "activity_value": float(amount),
+                    "activity_unit": unit
+                }
+            },
+            "endpoint_type": "electricity"
+        }
+    
+    async def _calculate_heat_steam(
+        self,
+        amount: float,
+        unit: str,
+        region: str,
+        year: int
+    ) -> Dict[str, Any]:
+        """Calculate emissions using direct estimation for heat/steam"""
+        
+        # Normalize energy unit for the estimate call
+        unit_lower = unit.lower()
+        if unit_lower == 'gj':
+            energy = float(amount) * 277.78  # Convert to kWh
+            energy_unit = "kWh"
+        elif unit_lower == 'mmbtu':
+            energy = float(amount) * 293.07  # Convert to kWh
+            energy_unit = "kWh"
+        elif unit_lower == 'mwh':
+            energy = float(amount) * 1000  # Convert to kWh
+            energy_unit = "kWh"
+        else:
+            energy = float(amount)
+            energy_unit = "kWh"
+        
+        print(f"DEBUG - Heat/Steam using direct estimate with {energy} {energy_unit}")
+        
+        # Use direct estimation with steam activity_id
+        return await self._calculate_estimate(
+            activity_search="steam heat purchased",
+            amount=energy,
+            unit=energy_unit,
+            param_type="energy",
+            region=region,
+            year=year
+        )
+    
+    async def _calculate_estimate(
+        self,
+        activity_search: str,
+        amount: float,
+        unit: str,
+        param_type: str,
+        region: str,
+        year: int
+    ) -> Dict[str, Any]:
+        """Calculate emissions using the estimate endpoint with dynamic activity_id search"""
+        
+        # Ensure activity_search is a string (may come as list from AI)
+        if isinstance(activity_search, list):
+            activity_search = " ".join(activity_search)
+        
+        # Search for the best activity_id
+        print(f"DEBUG - Searching for activity_id with: {activity_search}")
+        search_result = await self.client.search_emission_factors(
+            query=activity_search,
+            region=region,
+            year=year,
+            data_version=settings.CLIMATIQ_DATA_VERSION,
+            limit=5
+        )
+        
+        results = search_result.get("results", [])
+        
+        # If no results for specific region, try without region filter
+        if not results:
+            print(f"DEBUG - No results for '{activity_search}' in {region}, trying global search")
+            search_result = await self.client.search_emission_factors(
+                query=activity_search,
+                data_version=settings.CLIMATIQ_DATA_VERSION,
+                limit=10
+            )
+            results = search_result.get("results", [])
+        
+        # If still no results, try broader search
+        if not results:
+            print(f"DEBUG - No results, trying broader search with first word")
+            first_word = activity_search.split()[0] if activity_search else ""
+            search_result = await self.client.search_emission_factors(
+                query=first_word,
+                data_version=settings.CLIMATIQ_DATA_VERSION,
+                limit=10
+            )
+            results = search_result.get("results", [])
+        
+        if not results:
+            print(f"DEBUG - Still no results, falling back to autopilot")
+            return await self._calculate_autopilot(activity_search, amount, unit, param_type, region, year)
+        
+        # Find the best matching result based on unit type
+        activity_id = None
+        selected_result = None
+        for r in results:
+            unit_type = r.get("unit_type", [])
+            
+            # Match unit type to parameter type
+            if param_type == "weight" and "Weight" in unit_type:
+                activity_id = r.get("activity_id")
+                selected_result = r
+                break
+            elif param_type == "distance" and "Distance" in unit_type:
+                activity_id = r.get("activity_id")
+                selected_result = r
+                break
+            elif param_type == "energy" and "Energy" in unit_type:
+                activity_id = r.get("activity_id")
+                selected_result = r
+                break
+            elif param_type == "money" and "Money" in unit_type:
+                activity_id = r.get("activity_id")
+                selected_result = r
+                break
+            elif param_type == "passengers_distance" and "PassengersDistance" in unit_type:
+                activity_id = r.get("activity_id")
+                selected_result = r
+                break
+        
+        # If no exact match, use the first result
+        if not activity_id and results:
+            activity_id = results[0].get("activity_id")
+            selected_result = results[0]
+        
+        if not activity_id:
+            return await self._calculate_autopilot(activity_search, amount, unit, param_type, region, year)
+        
+        print(f"DEBUG - Found activity_id: {activity_id}")
+        
+        # Build parameters based on type
+        params = self._build_estimate_params(amount, unit, param_type)
+        
+        # Use the region from the found result if original region had no results
+        result_region = selected_result.get("region", region) if selected_result else region
+        
+        estimate_payload = {
+            "emission_factor": {
+                "activity_id": activity_id,
+                "data_version": settings.CLIMATIQ_DATA_VERSION
+            },
+            "parameters": params
+        }
+        
+        # Only add region if we have one
+        if result_region:
+            estimate_payload["emission_factor"]["region"] = result_region
+        
+        print(f"DEBUG - Estimate payload: {estimate_payload}")
+        result = await self.client.estimate(estimate_payload)
+        
+        co2e = result.get("co2e", 0)
+        
+        return {
+            "estimate": {
+                "co2e": co2e,
+                "co2e_unit": "kg",
+                "emission_factor": result.get("emission_factor", {}),
+                "activity_data": result.get("activity_data", {
+                    "activity_value": float(amount),
+                    "activity_unit": unit
+                })
+            },
+            "endpoint_type": "estimate"
+        }
+    
+    def _build_estimate_params(self, amount: float, unit: str, param_type: str) -> Dict[str, Any]:
+        """Build parameters for the estimate endpoint"""
+        
+        unit_lower = unit.lower()
+        
+        if param_type == "weight":
+            weight = float(amount)
+            if unit_lower in ['tonne', 'tonnes', 't', 'ton', 'tons']:
+                weight = weight * 1000  # Convert to kg
+            return {"weight": weight, "weight_unit": "kg"}
+        
+        elif param_type == "distance":
+            distance = float(amount)
+            if unit_lower in ['mi', 'mile', 'miles']:
+                return {"distance": distance, "distance_unit": "mi"}
+            return {"distance": distance, "distance_unit": "km"}
+        
+        elif param_type == "passengers_distance":
+            distance = float(amount)
+            if unit_lower in ['mi', 'mile', 'miles']:
+                return {"passengers": 1, "distance": distance, "distance_unit": "mi"}
+            return {"passengers": 1, "distance": distance, "distance_unit": "km"}
+        
+        elif param_type == "weight_distance":
+            # For freight in tkm (tonne-kilometers)
+            # Amount is already in tkm, need to provide weight and distance
+            # Climatiq expects weight (kg) and distance (km) separately
+            tkm = float(amount)
+            # Assume 1 tonne weight, so tkm = distance in km
+            # This means: weight = 1000 kg, distance = tkm km
+            return {"weight": 1000, "weight_unit": "kg", "distance": tkm, "distance_unit": "km"}
+        
+        elif param_type == "energy":
+            energy = float(amount)
+            if unit_lower == 'gj':
+                energy = energy * 277.78
+            elif unit_lower == 'mwh':
+                energy = energy * 1000
+            return {"energy": energy, "energy_unit": "kWh"}
+        
+        elif param_type == "money":
+            return {"money": float(amount), "money_unit": unit.lower()}
+        
+        else:
+            # Default to weight
+            return {"weight": float(amount), "weight_unit": "kg"}
+    
+    async def _calculate_freight(
+        self,
+        activity_search: str,
+        amount: float,
+        unit: str,
+        region: str,
+        year: int
+    ) -> Dict[str, Any]:
+        """Calculate emissions using freight estimation"""
+        
+        # For now, use estimate endpoint with freight-related activity
+        return await self._calculate_estimate(
+            activity_search=activity_search,
+            amount=amount,
+            unit=unit,
+            param_type="distance",
+            region=region,
+            year=year
+        )
+    
+    async def _calculate_autopilot(
+        self,
+        description: str,
+        amount: float,
+        unit: str,
+        param_type: str,
+        region: str,
+        year: int
+    ) -> Dict[str, Any]:
+        """Calculate emissions using the autopilot endpoint"""
+        
+        autopilot_payload = {
+            "text": description,
+            "region": region,
+            "year": year
+        }
+        
+        # Build parameters
+        params = self._build_estimate_params(amount, unit, param_type)
+        autopilot_payload["parameters"] = params
+        
+        print(f"DEBUG - Autopilot payload: {autopilot_payload}")
+        
+        try:
+            result = await self.client.autopilot_estimate(autopilot_payload)
+            
+            # Extract CO2e
+            estimate = result.get("estimate", {})
+            co2e = estimate.get("co2e", 0)
+            
+            return {
+                "estimate": {
+                    "co2e": co2e,
+                    "co2e_unit": "kg",
+                    "emission_factor": estimate.get("emission_factor", {}),
+                    "activity_data": {
+                        "activity_value": float(amount),
+                        "activity_unit": unit
+                    }
+                },
+                "endpoint_type": "autopilot"
+            }
+        except Exception as e:
+            # If region-specific call fails, try without region
+            if "region" in str(e).lower() or "no_emission_factors" in str(e).lower():
+                print(f"DEBUG - Autopilot failed for region {region}, retrying without region")
+                autopilot_payload_global = {
+                    "text": description,
+                    "year": year,
+                    "parameters": params
+                }
+                
+                try:
+                    result = await self.client.autopilot_estimate(autopilot_payload_global)
+                    estimate = result.get("estimate", {})
+                    co2e = estimate.get("co2e", 0)
+                    
+                    return {
+                        "estimate": {
+                            "co2e": co2e,
+                            "co2e_unit": "kg",
+                            "emission_factor": estimate.get("emission_factor", {}),
+                            "activity_data": {
+                                "activity_value": float(amount),
+                                "activity_unit": unit
+                            }
+                        },
+                        "endpoint_type": "autopilot"
+                    }
+                except Exception as e2:
+                    print(f"DEBUG - Autopilot fallback also failed: {e2}")
+            else:
+                print(f"DEBUG - Autopilot fallback also failed: {e}")
+            
+            # Return error result
+            return {
+                "estimate": {
+                    "co2e": 0,
+                    "co2e_unit": "kg",
+                    "emission_factor": {},
+                    "activity_data": {
+                        "activity_value": float(amount),
+                        "activity_unit": unit
+                    },
+                    "error": str(e)
+                },
+                "endpoint_type": "error"
+            }

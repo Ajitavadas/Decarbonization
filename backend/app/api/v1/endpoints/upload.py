@@ -19,6 +19,7 @@ from app.models.user import User
 from app.models.project import Project
 from app.models.activity import EmissionActivity
 from app.models.batch_job import BatchJob
+from app.models.flagged_event import FlaggedEvent
 from app.services.unit_normalizer import UnitNormalizer
 from app.services.ai_classifier_service import AIScopeClassifierService
 from app.integration.climatiq.service import ClimatiqService
@@ -29,6 +30,62 @@ import logging
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
+
+
+def parse_number(value) -> float:
+    """
+    Parse a number that may contain comma separators or other formatting.
+    
+    Handles formats like:
+    - "85,000" → 85000.0
+    - "1,234,567.89" → 1234567.89
+    - "12.5" → 12.5
+    - 12.5 → 12.5
+    - "1 234" (European spacing) → 1234.0
+    
+    Args:
+        value: The value to parse (string or numeric)
+        
+    Returns:
+        float value
+        
+    Raises:
+        ValueError: If the value cannot be parsed as a number
+    """
+    if value is None:
+        return 0.0
+    
+    # If already a number, just convert
+    if isinstance(value, (int, float)):
+        return float(value)
+    
+    # Convert to string and clean
+    str_value = str(value).strip()
+    
+    if not str_value:
+        return 0.0
+    
+    # Remove thousand separators (commas and spaces)
+    # Be careful with European format where comma is decimal separator
+    # Check if there's a period - if so, commas are likely thousand separators
+    if '.' in str_value:
+        # e.g., "1,234,567.89" → "1234567.89"
+        cleaned = str_value.replace(',', '').replace(' ', '')
+    elif str_value.count(',') == 1:
+        # Could be European decimal (e.g., "12,5" for 12.5) or thousand separator (e.g., "1,000")
+        # Check position: if comma is followed by exactly 3 digits at end, it's a thousand separator
+        parts = str_value.split(',')
+        if len(parts[1]) == 3 and parts[1].isdigit():
+            # Thousand separator: "1,000" → "1000"
+            cleaned = str_value.replace(',', '').replace(' ', '')
+        else:
+            # European decimal: "12,5" → "12.5"
+            cleaned = str_value.replace(' ', '').replace(',', '.')
+    else:
+        # Multiple commas = thousand separators: "1,234,567" → "1234567"
+        cleaned = str_value.replace(',', '').replace(' ', '')
+    
+    return float(cleaned)
 
 
 def compute_activity_hash(project_id: str, description: str, amount: float, unit: str, activity_date: str, region: str = None) -> str:
@@ -205,6 +262,10 @@ async def upload_csv(
         contents = await file.read()
         df = pd.read_csv(io.StringIO(contents.decode('utf-8')))
         
+        # Normalize column names to lowercase for case-insensitive matching
+        # This handles CSV files with varying column name cases (e.g., "Description" vs "description")
+        df.columns = df.columns.str.lower().str.strip()
+        
         # Initialize services
         unit_normalizer = UnitNormalizer()
         ai_classifier = AIScopeClassifierService()
@@ -233,7 +294,7 @@ async def upload_csv(
                 # Handle unit conversions
                 if original_unit in ['therm', 'therms'] and normalized_unit == 'kWh':
                     # Convert therms to kWh (1 therm = 29.3 kWh)
-                    original_amount = float(df.at[idx, 'amount']) if pd.notna(df.at[idx, 'amount']) else 0
+                    original_amount = parse_number(df.at[idx, 'amount']) if pd.notna(df.at[idx, 'amount']) else 0
                     converted_amount = original_amount * 29.3
                     df.at[idx, 'amount'] = converted_amount
                     print(f"  Row {idx}: {original_amount} {original_unit} → {converted_amount} kWh")
@@ -251,7 +312,7 @@ async def upload_csv(
             try:
                 # Extract and validate data
                 description = str(row.get("description", ""))
-                amount = float(row.get("amount", 0))
+                amount = parse_number(row.get("amount", 0))
                 unit = str(row.get("unit", ""))
                 region = str(row.get("region", "")) if pd.notna(row.get("region")) else None
                 year = int(row.get("year")) if pd.notna(row.get("year")) else datetime.now().year
@@ -283,51 +344,94 @@ async def upload_csv(
                 else:
                     unit_type = "money"  # Default fallback
                 
-                # AI Classification
-                classification = None
+                # AI Classification for Climatiq routing
+                climatiq_classification = None
+                scope = "Scope 3"  # Default
                 try:
-                    # Use the correct method signature: classify_transaction(description, category, supplier_name)
+                    # Get category from CSV if available
                     category = str(row.get("category", "")) if pd.notna(row.get("category")) else ""
-                    supplier_name = str(row.get("supplier_name", "")) if pd.notna(row.get("supplier_name")) else None
-                    classification = await ai_classifier.classify_transaction(description, category, supplier_name)
-                    print(f"  AI Classification result: {classification}")
+                    
+                    # Use the new comprehensive classification method
+                    climatiq_classification = await ai_classifier.classify_for_climatiq(
+                        description=description,
+                        unit=unit,
+                        category=category,
+                        region=region or "US"
+                    )
+                    print(f"  AI Classification result: {climatiq_classification}")
+                    
+                    # Extract scope from classification
+                    scope_num = climatiq_classification.get("scope", 3)
+                    scope = f"Scope {scope_num}"
+                    
                 except Exception as e:
                     print(f"  AI Classification failed: {e}")
-                    # Fallback to basic classification
-                    classification = (3, 0.0, True)  # Default to Scope 3
+                    # Fallback classification
+                    climatiq_classification = {
+                        "scope": 3,
+                        "endpoint": "autopilot",
+                        "parameter_type": unit_type,
+                        "activity_search": description,
+                        "normalized_description": description
+                    }
                 
-                # Calculate emissions using Climatiq
-                autopilot_result = await climatiq_service.calculate_with_ai_suggestion(
-                    text=description,
-                    amount=amount,
-                    unit=unit,  # This is already normalized by unit_normalizer
-                    unit_type=unit_type,
-                    region=region,
-                    year=year
-                )
+                # Calculate emissions using the new classification-based routing
+                try:
+                    # For freight activities with km unit, convert to tkm using AI-provided weight
+                    calc_amount = amount
+                    calc_unit = unit
+                    
+                    endpoint = climatiq_classification.get("endpoint", "")
+                    param_type = climatiq_classification.get("parameter_type", "")
+                    freight_weight = climatiq_classification.get("freight_weight_tonnes")
+                    
+                    # Convert km to tkm for freight activities
+                    if (endpoint == "freight" or param_type == "weight_distance") and unit.lower() in ["km", "miles", "mi"]:
+                        if freight_weight and freight_weight > 0:
+                            # Convert distance to tonne-km using AI-estimated weight
+                            if unit.lower() in ["miles", "mi"]:
+                                calc_amount = amount * 1.60934 * freight_weight  # miles to km, then to tkm
+                            else:
+                                calc_amount = amount * freight_weight  # km * tonnes = tkm
+                            calc_unit = "tkm"
+                            print(f"  🚛 Freight conversion: {amount} {unit} × {freight_weight} tonnes = {calc_amount} tkm")
+                        else:
+                            # Default weight estimate if not provided
+                            default_weight = 10  # tonnes per truck load
+                            if unit.lower() in ["miles", "mi"]:
+                                calc_amount = amount * 1.60934 * default_weight
+                            else:
+                                calc_amount = amount * default_weight
+                            calc_unit = "tkm"
+                            print(f"  🚛 Freight conversion (default weight): {amount} {unit} × {default_weight} tonnes = {calc_amount} tkm")
+                    
+                    calculation_result = await climatiq_service.calculate_with_classification(
+                        classification=climatiq_classification,
+                        amount=calc_amount,
+                        unit=calc_unit,
+                        region=region,
+                        year=year
+                    )
+                except Exception as e:
+                    print(f"  Climatiq calculation failed: {e}, trying fallback")
+                    # Fallback to old method
+                    calculation_result = await climatiq_service.calculate_with_ai_suggestion(
+                        text=description,
+                        amount=amount,
+                        unit=unit,
+                        unit_type=unit_type,
+                        region=region,
+                        year=year
+                    )
                 
                 # Extract co2e
-                estimate = autopilot_result.get("estimate", {})
+                estimate = calculation_result.get("estimate", {})
+                endpoint_type = calculation_result.get("endpoint_type", "autopilot")
+                co2e = estimate.get("co2e", 0)
                 
-                # Extract co2e using the new function
-                endpoint_type = autopilot_result.get("endpoint_type", "autopilot")
-                co2e = extract_co2e_from_response(autopilot_result, endpoint_type)
-                
-                # Debug: print the response structure and endpoint type
+                # Debug output
                 print(f"DEBUG - Endpoint type: {endpoint_type}")
-                print(f"DEBUG - Autopilot result keys: {list(autopilot_result.keys())}")
-                if "estimate" in autopilot_result:
-                    print(f"DEBUG - Estimate keys: {list(autopilot_result['estimate'].keys())}")
                 print(f"DEBUG - CO2e value: {co2e}")
-                print(f"DEBUG - Full autopilot result: {autopilot_result}")
-                
-                # Get scope from classification or Autopilot
-                if classification:
-                    # classification is a tuple: (scope, confidence, needs_review)
-                    scope_num, confidence, needs_review = classification
-                    scope = f"Scope {scope_num}"
-                else:
-                    scope = "Scope 3"
                 
                 # Compute content hash for deduplication
                 activity_date_str_for_hash = str(activity_date) if activity_date else ""
@@ -379,12 +483,33 @@ async def upload_csv(
                 else:
                     activity_type_val = "other"
                 
-                # Create activity
+                # Override activity_type from AI classification endpoint for more accuracy
+                if climatiq_classification:
+                    endpoint = climatiq_classification.get("endpoint", "")
+                    if endpoint == "fuel":
+                        activity_type_val = "stationary_combustion"
+                    elif endpoint == "electricity":
+                        activity_type_val = "electricity"
+                    elif endpoint == "heat_steam":
+                        activity_type_val = "purchased_heat"
+                    elif endpoint == "estimate" and "flight" in climatiq_classification.get("activity_search", "").lower():
+                        activity_type_val = "business_travel"
+                    elif endpoint == "estimate" and "commute" in climatiq_classification.get("activity_search", "").lower():
+                        activity_type_val = "employee_commuting"
+                    elif endpoint == "freight":
+                        activity_type_val = "freight"
+                
                 activity = EmissionActivity(
                     project_id=project.id,
                     batch_job_id=batch_job.id,
                     activity_type=activity_type_val,
-                    sub_type=None,  # scope3Category not available in tuple return
+                    # Handle activity_search which may be a string or list, and truncate to 50 chars
+                    sub_type=(
+                        (" ".join(climatiq_classification.get("activity_search", [])) 
+                         if isinstance(climatiq_classification.get("activity_search"), list) 
+                         else str(climatiq_classification.get("activity_search", "")))[:50]
+                        if climatiq_classification else None
+                    ),
                     scope=scope,
                     activity_date=activity_date,
                     co2e_kg=co2e,
@@ -396,12 +521,47 @@ async def upload_csv(
                         "amount": amount,
                         "unit": unit,
                         "unit_type": unit_type,
-                        "classification": classification,
-                        "autopilot_response": autopilot_result
+                        "classification": climatiq_classification,
+                        "calculation_response": calculation_result
                     }
                 )
                 
                 db.add(activity)
+                db.flush()  # Get activity.id before creating flagged event
+                
+                # Create a flagged event if CO2e is 0 (emission factor not found)
+                if co2e == 0 or co2e is None:
+                    endpoint_type = calculation_result.get("endpoint_type", "unknown") if calculation_result else "error"
+                    error_msg = ""
+                    if calculation_result:
+                        estimate_data = calculation_result.get("estimate", {})
+                        error_msg = estimate_data.get("error", "No emission factor found for this activity")
+                    
+                    flagged_event = FlaggedEvent(
+                        organization_id=project.organization_id,
+                        project_id=project.id,
+                        activity_id=activity.id,
+                        flag_type="emission_factor_missing",
+                        severity="high",
+                        rule_id="climatiq_ef_not_found",
+                        title=f"No emission factor found: {description[:50]}",
+                        description=f"Could not calculate emissions for '{description}' with amount {amount} {unit}. "
+                                   f"The Climatiq API ({endpoint_type}) could not find a matching emission factor. {error_msg}",
+                        recommendation=f"Verify the activity description is accurate, or consider using a manual emission factor.",
+                        evidence={
+                            "description": description,
+                            "amount": amount,
+                            "unit": unit,
+                            "classification": climatiq_classification,
+                            "endpoint_type": endpoint_type,
+                            "api_response": calculation_result
+                        },
+                        status="open",
+                        confidence_score=0.0
+                    )
+                    db.add(flagged_event)
+                    print(f"  ⚠️ Created anomaly flag for zero-emission activity: {description[:50]}")
+                
                 successful_count += 1
                 
             except Exception as e:

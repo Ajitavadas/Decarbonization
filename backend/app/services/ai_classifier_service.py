@@ -260,6 +260,302 @@ Example:
         except Exception:
             logger.error(f"Failed to parse Groq JSON: {content}")
             return []
+    
+    async def classify_for_climatiq(
+        self,
+        description: str,
+        unit: str,
+        category: str = "",
+        region: str = "US"
+    ) -> Dict[str, Any]:
+        """
+        Classify an activity for Climatiq API routing.
+        
+        Returns comprehensive classification including:
+        - scope: 1, 2, or 3
+        - endpoint: "fuel", "electricity", "heat_steam", "estimate", "freight", "autopilot"
+        - parameter_type: "energy", "volume", "weight", "distance", "money", "passengers_distance"
+        - fuel_type: (for fuel endpoint) "diesel", "lpg", "natural_gas", etc.
+        - activity_search: Keywords to search for activity_id
+        - normalized_description: Cleaned description for Autopilot
+        """
+        prompt = f"""You are an expert in carbon emissions calculation and the Climatiq API.
+
+Analyze this activity and determine the best Climatiq API endpoint and parameters:
+
+Description: {description}
+Unit: {unit}
+Category: {category}
+Region: {region}
+
+Based on the activity, determine:
+
+1. **scope**: 1 (direct emissions), 2 (purchased energy), or 3 (value chain)
+
+2. **endpoint**: Which Climatiq API endpoint to use:
+   - "fuel": For fuel combustion (diesel, gasoline, LPG, natural gas burned on-site)
+   - "electricity": For purchased electricity (kWh, MWh)
+   - "heat_steam": For purchased steam/heat (GJ, MMBtu)
+   - "estimate": For other activities using emission factors (materials, travel, waste, refrigerants)
+   - "freight": For freight/logistics - use this if category contains "freight", "upstream transport", "downstream transport", "logistics", or description mentions goods/materials transport
+   - "autopilot": When unsure, let AI decide
+
+3. **parameter_type**: The unit category:
+   - "energy": kWh, MWh, GJ, therms
+   - "volume": L, gallons, m3
+   - "weight": kg, tonne, lb
+   - "distance": km, miles (for passenger travel only)
+   - "weight_distance": tkm, tonne-km (for freight - this is weight × distance)
+   - "money": USD, EUR, etc.
+   - "passengers_distance": For passenger travel (flights, trains)
+
+   IMPORTANT: For freight transport, the correct parameter_type is "weight_distance" (tkm).
+   If the unit is km but the activity is freight (goods transport), set parameter_type to "weight_distance".
+
+4. **fuel_type** (only if endpoint="fuel"):
+   - "diesel" for diesel fuel
+   - "lpg" for LPG/propane
+   - "natural_gas" for natural gas
+   - "motor_gasoline" for petrol/gasoline
+
+5. **activity_search**: 2-4 keywords to search for the right emission factor in Climatiq.
+   Examples:
+   - "diesel generator" -> "fuel diesel stationary"
+   - "LPG heating" -> "lpg heating stationary"
+   - "business flights" -> "passenger flight domestic"
+   - "steel purchased" -> "steel production manufacturing"
+   - "employee commuting cars" -> "passenger car commute"
+   - "waste landfill" -> "waste landfill municipal"
+   - "refrigerant R410A" -> "refrigerant fugitive r410a"
+   - "transport raw materials" -> "freight truck road transport"
+   - "transport finished goods" -> "freight vehicle road downstream"
+   - "upstream freight" -> "freight truck supply chain"
+   - "downstream freight" -> "freight vehicle delivery"
+
+6. **normalized_description**: Clean, simple description for Climatiq Autopilot API.
+   Remove unnecessary words, keep the essential activity type.
+
+7. **freight_weight_tonnes** (OPTIONAL, only if endpoint="freight" AND unit is distance like km):
+   If this is a freight activity but the unit is distance (km, miles), provide an estimated 
+   average cargo weight in tonnes per trip. Use 10 tonnes as default for heavy goods,
+   5 tonnes for medium goods, 1 tonne for light goods. This helps convert distance to tkm.
+
+Return ONLY a JSON object (no markdown):
+{{
+    "scope": 3,
+    "endpoint": "freight",
+    "parameter_type": "weight_distance",
+    "fuel_type": null,
+    "activity_search": "freight truck road transport",
+    "normalized_description": "Road freight transport",
+    "freight_weight_tonnes": 10
+}}
+"""
+        
+        try:
+            response_text = await self.call_ai(prompt, json_mode=True, preferred_provider="mistral")
+            
+            # Parse JSON response
+            clean_content = response_text.strip()
+            if clean_content.startswith("```json"):
+                clean_content = clean_content[7:-3].strip()
+            elif clean_content.startswith("```"):
+                clean_content = clean_content[3:-3].strip()
+            
+            result = json.loads(clean_content)
+            
+            # Validate required fields
+            if "scope" not in result:
+                result["scope"] = 3
+            if "endpoint" not in result:
+                result["endpoint"] = "autopilot"
+            if "parameter_type" not in result:
+                result["parameter_type"] = self._infer_parameter_type(unit)
+            if "activity_search" not in result:
+                result["activity_search"] = description
+            if "normalized_description" not in result:
+                result["normalized_description"] = description
+            
+            logger.info(f"AI Classification for '{description[:50]}...': {result}")
+            return result
+            
+        except Exception as e:
+            logger.warning(f"AI classification failed: {e}, using fallback")
+            return self._fallback_climatiq_classification(description, unit, category)
+    
+    def _infer_parameter_type(self, unit: str) -> str:
+        """Infer parameter type from unit"""
+        unit_lower = unit.lower()
+        
+        if unit_lower in ['kwh', 'mwh', 'gwh', 'wh', 'gj', 'mj', 'therm', 'therms', 'mmbtu', 'btu']:
+            return "energy"
+        elif unit_lower in ['l', 'liter', 'liters', 'litre', 'litres', 'gal', 'gallon', 'gallons', 'm3', 'm³']:
+            return "volume"
+        elif unit_lower in ['kg', 'kilogram', 'kilograms', 't', 'tonne', 'tonnes', 'ton', 'tons', 'lb', 'lbs', 'g', 'gram']:
+            return "weight"
+        elif unit_lower in ['km', 'kilometer', 'kilometers', 'mi', 'mile', 'miles', 'm', 'meter', 'meters']:
+            return "distance"
+        elif unit_lower in ['usd', 'eur', 'gbp', 'inr', 'cad', 'aud', 'jpy', 'chf', 'cny', 'aed']:
+            return "money"
+        else:
+            return "weight"  # Default fallback
+    
+    def _fallback_climatiq_classification(self, description: str, unit: str, category: str) -> Dict[str, Any]:
+        """Fallback classification when AI fails"""
+        desc_lower = description.lower()
+        cat_lower = category.lower()
+        unit_lower = unit.lower()
+        
+        # Determine parameter type
+        param_type = self._infer_parameter_type(unit)
+        
+        # Fuel-related activities (Scope 1)
+        if any(x in desc_lower for x in ['diesel', 'gasoline', 'petrol', 'lpg', 'propane']):
+            fuel_type = "diesel"
+            if 'lpg' in desc_lower or 'propane' in desc_lower:
+                fuel_type = "lpg"
+            elif 'gasoline' in desc_lower or 'petrol' in desc_lower:
+                fuel_type = "motor_gasoline"
+            
+            return {
+                "scope": 1,
+                "endpoint": "fuel",
+                "parameter_type": param_type,
+                "fuel_type": fuel_type,
+                "activity_search": f"fuel {fuel_type} combustion stationary",
+                "normalized_description": f"{fuel_type} fuel combustion"
+            }
+        
+        # Natural gas/heating (Scope 1)
+        if any(x in desc_lower for x in ['natural gas', 'heating', 'furnace', 'boiler']) and 'electricity' not in desc_lower:
+            return {
+                "scope": 1,
+                "endpoint": "fuel",
+                "parameter_type": "energy" if param_type == "energy" else "volume",
+                "fuel_type": "natural_gas",
+                "activity_search": "natural gas heating combustion",
+                "normalized_description": "Natural gas combustion for heating"
+            }
+        
+        # Electricity (Scope 2)
+        if 'electricity' in desc_lower or ('grid' in desc_lower and 'power' in desc_lower):
+            return {
+                "scope": 2,
+                "endpoint": "electricity",
+                "parameter_type": "energy",
+                "activity_search": "electricity grid supply",
+                "normalized_description": "Electricity consumption from grid"
+            }
+        
+        # Steam/Heat (Scope 2)
+        if 'steam' in desc_lower or ('heat' in desc_lower and 'purchased' in desc_lower):
+            return {
+                "scope": 2,
+                "endpoint": "heat_steam",
+                "parameter_type": "energy",
+                "activity_search": "steam heat purchased",
+                "normalized_description": "Purchased steam or heat"
+            }
+        
+        # Flights (Scope 3)
+        if any(x in desc_lower for x in ['flight', 'fly', 'air travel', 'airline', 'plane']):
+            return {
+                "scope": 3,
+                "endpoint": "estimate",
+                "parameter_type": "passengers_distance",
+                "activity_search": "passenger flight domestic",
+                "normalized_description": "Business air travel"
+            }
+        
+        # Employee commuting (Scope 3)
+        if any(x in desc_lower for x in ['commut', 'employee travel', 'staff travel']):
+            return {
+                "scope": 3,
+                "endpoint": "estimate",
+                "parameter_type": "distance",
+                "activity_search": "passenger car commute employee",
+                "normalized_description": "Employee commuting by car"
+            }
+        
+        # Business travel by car (Scope 3)
+        if any(x in desc_lower for x in ['car rental', 'rental car', 'business mileage', 'business travel']) and 'flight' not in desc_lower:
+            return {
+                "scope": 3,
+                "endpoint": "estimate",
+                "parameter_type": "distance",
+                "activity_search": "passenger car business travel",
+                "normalized_description": "Business travel by car"
+            }
+        
+        # Freight/Transport (Scope 3)
+        if any(x in desc_lower for x in ['freight', 'transport', 'logistics', 'shipping', 'delivery']):
+            return {
+                "scope": 3,
+                "endpoint": "estimate",
+                "parameter_type": "distance",
+                "activity_search": "freight road transport truck",
+                "normalized_description": "Freight transport by road"
+            }
+        
+        # Materials - steel, metals (Scope 3)
+        if any(x in desc_lower for x in ['steel', 'iron', 'metal', 'aluminum', 'aluminium']):
+            return {
+                "scope": 3,
+                "endpoint": "estimate",
+                "parameter_type": "weight",
+                "activity_search": "steel production manufacturing metal",
+                "normalized_description": "Steel production"
+            }
+        
+        # Materials - plastics (Scope 3)
+        if any(x in desc_lower for x in ['plastic', 'polymer', 'pvc', 'polyethylene']):
+            return {
+                "scope": 3,
+                "endpoint": "estimate",
+                "parameter_type": "weight",
+                "activity_search": "plastic production manufacturing",
+                "normalized_description": "Plastic production"
+            }
+        
+        # Waste (Scope 3)
+        if any(x in desc_lower for x in ['waste', 'landfill', 'disposal', 'recycling']):
+            return {
+                "scope": 3,
+                "endpoint": "estimate",
+                "parameter_type": "weight",
+                "activity_search": "waste landfill disposal municipal",
+                "normalized_description": "Waste disposal to landfill"
+            }
+        
+        # Refrigerants (Scope 1)
+        if any(x in desc_lower for x in ['refrigerant', 'r-410a', 'r410a', 'hfc', 'ac system', 'air condition']):
+            return {
+                "scope": 1,
+                "endpoint": "estimate",
+                "parameter_type": "weight",
+                "activity_search": "refrigerant fugitive emissions hfc",
+                "normalized_description": "Refrigerant leakage"
+            }
+        
+        # Trucks/Fleet vehicles (Scope 1)
+        if any(x in desc_lower for x in ['truck', 'fleet', 'company vehicle', 'owned vehicle']):
+            return {
+                "scope": 1,
+                "endpoint": "fuel",
+                "parameter_type": param_type,
+                "fuel_type": "diesel",
+                "activity_search": "fuel diesel mobile combustion truck",
+                "normalized_description": "Diesel combustion in company vehicles"
+            }
+        
+        # Default: Use autopilot
+        return {
+            "scope": 3,
+            "endpoint": "autopilot",
+            "parameter_type": param_type,
+            "activity_search": description[:50],
+            "normalized_description": description
+        }
 
 # Singleton instance
 ai_classifier = AIScopeClassifierService()

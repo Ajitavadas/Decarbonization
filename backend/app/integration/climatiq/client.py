@@ -297,6 +297,7 @@ class ClimatiqClient:
         category: Optional[str] = None,
         region: Optional[str] = None,
         year: Optional[int] = None,
+        data_version: Optional[str] = None,
         page: int = 1,
         limit: int = 10
     ) -> Dict[str, Any]:
@@ -309,6 +310,7 @@ class ClimatiqClient:
             category: Activity category filter
             region: Region filter
             year: Year filter
+            data_version: Climatiq data version (e.g., "29.29")
             page: Page number
             limit: Results per page
             
@@ -328,5 +330,7 @@ class ClimatiqClient:
             params["region"] = region
         if year:
             params["year"] = year
+        if data_version:
+            params["data_version"] = data_version
         
         return await self._make_request("GET", "/data/v1/search", params=params)
