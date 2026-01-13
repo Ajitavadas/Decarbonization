@@ -1,91 +1,122 @@
 """
-Copilot Service
-Context-aware Carbon Copilot with SQL-first responses and optional LLM explanation.
+Copilot Service - LLM-Powered Carbon Copilot with Dynamic SQL Generation
 
-Design Principles:
-1. Deterministic First: All facts come from SQL, never from LLM
-2. LLM as Explainer: LLM only summarizes/explains structured data
-3. Offline Fallback: Always works even when LLM unavailable
-4. Budget Conscious: Respects Groq free tier limits
+Architecture:
+1. LLM Intent Understanding: Groq understands natural language questions
+2. Dynamic SQL Generation: Groq generates safe read-only queries
+3. Safe Execution: Queries validated and executed with org isolation
+4. Natural Response: Groq generates human-friendly responses with context
+5. Rate Limiting: Per-org tracking with cooldown notifications
 """
 
 import logging
 import json
-from typing import List, Dict, Any, Optional
+import re
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 from uuid import UUID
 from decimal import Decimal
+from collections import defaultdict
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func, extract
+from sqlalchemy import func, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.activity import EmissionActivity
 from app.models.project import Project
 from app.models.reduction_target import ReductionTarget
 from app.models.flagged_event import FlaggedEvent
 from app.models.organization import Organization
-from app.services.llm_router import LLMRouter, LLMTask, create_llm_router
+from app.core.config import settings
 from app.core.archetype_config import get_archetype
 
 logger = logging.getLogger(__name__)
 
 
-class Intent:
-    """User intent categories"""
-    TOTAL_EMISSIONS = "total_emissions"
-    SCOPE_BREAKDOWN = "scope_breakdown"
-    TREND = "trend"
-    TARGET_PROGRESS = "target_progress"
-    FINDINGS = "findings"
-    EXPLAIN = "explain"
-    SUGGEST = "suggest"
-    DATA_STATUS = "data_status"
-    PROJECTION = "projection"  # NEW: "What will my emissions be in 2030?"
-    UNKNOWN = "unknown"
+# Database schema for LLM context
+DATABASE_SCHEMA = """
+Available Tables:
 
+1. emission_activities - Individual emission records
+   Columns:
+   - id (UUID): Unique identifier
+   - activity_type (str): 'electricity', 'natural_gas', 'fuel', 'travel', 'freight', 'waste', 'procurement'
+   - sub_type (str): Sub-classification
+   - scope (str): 'Scope 1', 'Scope 2', or 'Scope 3'
+   - activity_date (datetime): When activity occurred
+   - co2e_kg (numeric): Calculated emissions in kg CO2e
+   - region (str): Geographic region code
+   - description (str): Human-readable activity description
+   - input_data (JSONB): Contains 'description', 'amount', 'unit' fields
+   - project_id (UUID): Links to projects
+   - emission_factor_id (str): Climatiq factor used
 
-# Offline response templates (used when LLM unavailable)
-OFFLINE_TEMPLATES = {
-    Intent.TOTAL_EMISSIONS: "Your total emissions are {total:,.0f} kg CO₂e. {scope_breakdown}",
-    Intent.SCOPE_BREAKDOWN: "Scope breakdown: {breakdown}",
-    Intent.TREND: "Emissions {direction} by {pct:.1f}% compared to {period}.",
-    Intent.TARGET_PROGRESS: "Target '{name}' is {progress:.0f}% complete. Status: {status}.",
-    Intent.FINDINGS: "You have {count} open findings{critical_note}.",
-    Intent.DATA_STATUS: "Data completeness: {completeness:.0f}%. {missing_note}",
-    Intent.SUGGEST: "Based on your {archetype} profile, focus areas include: {areas}.",
-    Intent.UNKNOWN: "I found the following data: {data}"
-}
+2. projects - Project containers for activities
+   Columns:
+   - id (UUID): Project identifier
+   - name (str): Project name
+   - organization_id (UUID): Owner organization
 
-# Intent detection keywords
-INTENT_KEYWORDS = {
-    Intent.TOTAL_EMISSIONS: ["total", "emissions", "how much", "co2", "carbon footprint"],
-    Intent.SCOPE_BREAKDOWN: ["scope", "breakdown", "by scope", "scope 1", "scope 2", "scope 3"],
-    Intent.TREND: ["trend", "increasing", "decreasing", "change", "compared to", "over time"],
-    Intent.TARGET_PROGRESS: ["target", "goal", "progress", "on track", "reduction target"],
-    Intent.FINDINGS: ["finding", "anomaly", "issue", "problem", "alert", "warning"],
-    Intent.EXPLAIN: ["explain", "why", "what does", "tell me about", "analyze"],
-    Intent.SUGGEST: ["suggest", "recommend", "should i", "how can i", "what can i do", "reduce", "biggest", "largest", "top", "sources", "main", "major"],
-    Intent.DATA_STATUS: ["data", "complete", "missing", "upload", "coverage"],
-    Intent.PROJECTION: ["project", "forecast", "predict", "future", "will be", "2025", "2030", "next year"],
-}
+3. flagged_events - Anomalies and findings
+   Columns:
+   - id (UUID): Finding identifier
+   - flag_type (str): 'gap', 'anomaly', 'archetype_mismatch', 'emission_factor_missing'
+   - severity (str): 'info', 'warning', 'critical', 'high'
+   - status (str): 'open', 'acknowledged', 'resolved', 'false_positive'
+   - title (str): Short summary
+   - description (text): Full issue description
+   - recommendation (text): Action to resolve - includes valid activity structure
+   - rule_id (str): Detection rule identifier
+   - evidence (JSONB): Supporting data
+   - activity_id (UUID): Linked activity if applicable
+   - organization_id (UUID): Owner
+   - created_at (datetime): When flagged
+
+4. reduction_targets - Emission reduction goals
+   Columns:
+   - id (UUID): Target identifier
+   - name (str): Target name
+   - target_type (str): 'absolute' or 'percentage'
+   - scope (str): Target scope or 'all'
+   - baseline_year (str): Starting year
+   - baseline_value (numeric): Baseline emissions kg
+   - target_year (str): Goal year
+   - target_value (numeric): Target value
+   - current_value (numeric): Latest emissions
+   - progress_percentage (numeric): 0-100
+   - status (str): 'on_track', 'at_risk', 'off_track', 'achieved'
+   - is_active (bool): Active status
+   - organization_id (UUID): Owner
+"""
+
+# SQL blocklist for safety
+SQL_BLOCKLIST = [
+    'DELETE', 'UPDATE', 'INSERT', 'DROP', 'TRUNCATE', 'ALTER', 
+    'CREATE', 'GRANT', 'REVOKE', 'COMMIT', 'ROLLBACK', 'EXECUTE',
+    'EXEC', 'INTO', ';--', 'UNION'
+]
+
+# In-memory rate limit tracking (per org)
+_rate_limit_tracker: Dict[str, Dict] = defaultdict(lambda: {"count": 0, "reset_at": None})
 
 
 class CopilotService:
     """
-    Context-aware Carbon Copilot Service
+    LLM-Powered Carbon Copilot Service
     
     Features:
-    - SQL-first data retrieval (100% deterministic)
-    - Intent classification (keyword-based, no LLM)
-    - Optional LLM explanation (user-triggered, cached)
-    - Graceful offline fallback
+    - Natural language understanding via Groq
+    - Dynamic SQL query generation
+    - Safe read-only execution with org isolation
+    - Rate limiting with cooldown notifications
     """
     
     def __init__(self, db: Session, organization_id: UUID, redis_client=None):
         self.db = db
         self.organization_id = organization_id
-        self.llm_router = create_llm_router(redis_client=redis_client, org_id=organization_id)
+        self.redis_client = redis_client
         self._organization = None
+        self._groq_client = None
     
     @property
     def organization(self) -> Organization:
@@ -95,6 +126,40 @@ class CopilotService:
             ).first()
         return self._organization
     
+    @property
+    def groq_client(self):
+        """Lazy load Groq client"""
+        if self._groq_client is None:
+            try:
+                from groq import Groq
+                self._groq_client = Groq(api_key=settings.GROQ_API_KEY)
+            except Exception as e:
+                logger.error(f"Failed to initialize Groq client: {e}")
+        return self._groq_client
+    
+    def _check_rate_limit(self) -> Tuple[bool, Optional[datetime]]:
+        """Check if organization has exceeded rate limit"""
+        org_key = str(self.organization_id)
+        now = datetime.utcnow()
+        
+        tracker = _rate_limit_tracker[org_key]
+        
+        # Reset if window expired
+        if tracker["reset_at"] is None or now >= tracker["reset_at"]:
+            tracker["count"] = 0
+            tracker["reset_at"] = now + timedelta(seconds=settings.COPILOT_RATE_LIMIT_WINDOW_SECONDS)
+        
+        # Check if over limit
+        if tracker["count"] >= settings.COPILOT_MAX_QUERIES_PER_HOUR:
+            return False, tracker["reset_at"]
+        
+        return True, None
+    
+    def _increment_usage(self):
+        """Increment rate limit counter"""
+        org_key = str(self.organization_id)
+        _rate_limit_tracker[org_key]["count"] += 1
+    
     async def chat(
         self,
         message: str,
@@ -102,556 +167,373 @@ class CopilotService:
         include_llm: bool = True
     ) -> Dict[str, Any]:
         """
-        Process a chat message and return LLM-generated response with RAG context.
+        Process a chat message using LLM-powered understanding and dynamic SQL.
         
-        Architecture: LLM-first with deterministic fallback
-        1. Classify intent (keyword-based)
-        2. Gather relevant facts from database (RAG context)
-        3. Generate response via Groq LLM using facts as context
-        4. Fallback to deterministic response only if LLM fails
-        
-        Args:
-            message: User's chat message
-            history: Previous conversation messages
-            include_llm: Whether to use LLM (True by default)
-            
-        Returns:
-            Response dict with text, data, and metadata
+        Flow:
+        1. Check rate limit
+        2. Gather base context
+        3. Generate SQL with Groq LLM
+        4. Execute query safely
+        5. Generate response with Groq
         """
         history = history or []
         
-        # 1. Classify intent (deterministic - for data gathering)
-        intent = self._classify_intent(message)
-        logger.info(f"Copilot intent classified: {intent}")
+        # 1. Check rate limit
+        allowed, reset_time = self._check_rate_limit()
+        if not allowed:
+            reset_str = reset_time.strftime("%H:%M UTC") if reset_time else "soon"
+            return {
+                "text": f"Rate limit reached. Carbon Copilot will be available again at {reset_str}. "
+                        f"You have {settings.COPILOT_MAX_QUERIES_PER_HOUR} queries per hour.",
+                "intent": "rate_limited",
+                "data": {},
+                "source": "rate_limit",
+                "model": None,
+                "suggestions": ["Try again later"],
+                "rate_limited": True,
+                "reset_at": reset_time.isoformat() if reset_time else None
+            }
         
-        # 2. Gather comprehensive facts from SQL for RAG context
-        facts = await self._get_facts_for_intent(intent)
+        # 2. Gather base context
+        context = self._get_base_context()
         
-        # 3. Prepare fallback response (used only if LLM fails)
-        fallback_response = self._format_offline_response(intent, facts)
-        
-        response = {
-            "text": fallback_response,
-            "intent": intent,
-            "data": facts,
-            "source": "deterministic",
-            "model": None,
-            "suggestions": self._get_quick_suggestions(intent, facts)
-        }
-        
-        # 4. PRIMARY: Generate response via Groq LLM with RAG context
-        if include_llm:
-            try:
-                llm_response = await self._get_llm_explanation(message, facts, intent)
+        # 3. Generate SQL with Groq LLM
+        try:
+            query_result = await self._generate_sql_with_llm(message, context)
+            intent = query_result.get("intent", "unknown")
+            sql_query = query_result.get("sql_query")
+            
+            # 4. Execute query safely (if provided)
+            query_data = []
+            query_error = None
+            rows_returned = 0
+            
+            if sql_query:
+                query_data, query_error = self._execute_safe_query(sql_query)
+                rows_returned = len(query_data)
                 
-                if llm_response and llm_response.text:
-                    response["text"] = llm_response.text
-                    response["source"] = llm_response.source
-                    response["model"] = llm_response.model
-                else:
-                    logger.warning("LLM returned empty response, using fallback")
-            except Exception as e:
-                logger.error(f"LLM call failed, using fallback: {e}")
-                response["source"] = "error_fallback"
-        
-        return response
+                if query_error:
+                    logger.warning(f"Query execution failed: {query_error}")
+            
+            # Add base context data
+            all_data = {
+                "organization": context.get("org_name"),
+                "total_emissions_kg": context.get("total_emissions"),
+                "query_results": query_data,
+                "rows_returned": rows_returned
+            }
+            
+            # 5. Generate natural language response
+            response_text = await self._generate_response_with_llm(
+                message, context, query_data, query_error, intent
+            )
+            
+            # 6. Track usage
+            self._increment_usage()
+            
+            return {
+                "text": response_text,
+                "intent": intent,
+                "data": all_data,
+                "source": "llm",
+                "model": settings.COPILOT_MODEL,
+                "suggestions": self._get_suggestions(intent, query_data),
+                "query_executed": sql_query if sql_query else None,
+                "rows_returned": rows_returned,
+                "rate_limited": False,
+                "reset_at": None
+            }
+            
+        except Exception as e:
+            logger.error(f"Copilot chat error: {e}", exc_info=True)
+            self._increment_usage()
+            
+            return {
+                "text": f"I encountered an issue processing your question. Please try rephrasing. Error: {str(e)[:100]}",
+                "intent": "error",
+                "data": {"error": str(e)},
+                "source": "error",
+                "model": None,
+                "suggestions": ["Try a simpler question", "Ask about total emissions"],
+                "rate_limited": False,
+                "reset_at": None
+            }
     
-    def _classify_intent(self, message: str) -> str:
-        """Classify user intent using keyword matching (no LLM)"""
-        message_lower = message.lower()
+    def _get_base_context(self) -> Dict[str, Any]:
+        """Gather base context for LLM"""
+        org = self.organization
         
-        # Score each intent based on keyword matches
-        scores = {}
-        for intent, keywords in INTENT_KEYWORDS.items():
-            score = sum(1 for kw in keywords if kw in message_lower)
-            if score > 0:
-                scores[intent] = score
-        
-        if not scores:
-            return Intent.UNKNOWN
-        
-        # Return highest scoring intent
-        return max(scores, key=scores.get)
-    
-    async def _get_facts_for_intent(self, intent: str) -> Dict[str, Any]:
-        """Get relevant facts from database based on intent"""
-        facts = {
-            "organization": self.organization.name if self.organization else "Unknown",
-            "archetype": self.organization.emission_archetype if self.organization else None,
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-        # Always include total emissions
-        total = self._get_total_emissions()
-        facts["total_emissions"] = total
-        
-        # Always include archetype info for RAG context
-        facts["archetype_info"] = self._get_archetype_info()
-        facts["org_profile"] = self._get_org_profile()
-        
-        if intent in [Intent.TOTAL_EMISSIONS, Intent.SCOPE_BREAKDOWN, Intent.EXPLAIN]:
-            facts["by_scope"] = self._get_scope_breakdown()
-            facts["by_category"] = self._get_category_breakdown()
-        
-        if intent == Intent.TREND:
-            facts["trend"] = self._get_emission_trend()
-        
-        if intent == Intent.TARGET_PROGRESS:
-            facts["targets"] = self._get_active_targets()
-        
-        if intent == Intent.FINDINGS:
-            facts["findings"] = self._get_findings_summary()
-            facts["recent_anomalies"] = self._get_recent_anomalies(limit=5)
-        
-        if intent == Intent.DATA_STATUS:
-            facts["completeness"] = self._get_data_completeness()
-        
-        if intent == Intent.SUGGEST:
-            facts["top_sources"] = self._get_top_emission_sources()
-        
-        if intent == Intent.PROJECTION:
-            facts["targets"] = self._get_active_targets()
-            facts["projections"] = self._get_projection_data()
-            facts["trend"] = self._get_emission_trend()
-        
-        return facts
-    
-    def _get_total_emissions(self) -> float:
-        """Get total emissions for organization"""
-        result = self.db.query(func.sum(EmissionActivity.co2e_kg)).join(
+        # Total emissions
+        total = self.db.query(func.sum(EmissionActivity.co2e_kg)).join(
             Project
         ).filter(
             Project.organization_id == self.organization_id
         ).scalar()
-        return float(result) if result else 0.0
-    
-    def _get_scope_breakdown(self) -> Dict[str, float]:
-        """Get emissions breakdown by scope"""
-        results = self.db.query(
+        
+        # Scope breakdown
+        scope_results = self.db.query(
             EmissionActivity.scope,
             func.sum(EmissionActivity.co2e_kg)
         ).join(Project).filter(
             Project.organization_id == self.organization_id
         ).group_by(EmissionActivity.scope).all()
         
-        return {scope: float(total) for scope, total in results if scope}
-    
-    def _get_category_breakdown(self) -> Dict[str, float]:
-        """Get emissions breakdown by activity type"""
-        results = self.db.query(
-            EmissionActivity.activity_type,
-            func.sum(EmissionActivity.co2e_kg)
-        ).join(Project).filter(
-            Project.organization_id == self.organization_id
-        ).group_by(EmissionActivity.activity_type).all()
+        by_scope = {scope: float(total_kg) for scope, total_kg in scope_results if scope}
         
-        return {cat: float(total) for cat, total in results if cat}
-    
-    def _get_emission_trend(self) -> Dict[str, Any]:
-        """Get emission trend (compare current quarter to previous)"""
-        now = datetime.utcnow()
-        current_quarter_start = datetime(now.year, ((now.month - 1) // 3) * 3 + 1, 1)
-        prev_quarter_start = current_quarter_start - timedelta(days=90)
-        
-        def get_quarter_total(start, end):
-            result = self.db.query(func.sum(EmissionActivity.co2e_kg)).join(
-                Project
-            ).filter(
-                Project.organization_id == self.organization_id,
-                EmissionActivity.activity_date >= start,
-                EmissionActivity.activity_date < end
-            ).scalar()
-            return float(result) if result else 0
-        
-        current = get_quarter_total(current_quarter_start, now)
-        previous = get_quarter_total(prev_quarter_start, current_quarter_start)
-        
-        if previous > 0:
-            change_pct = ((current - previous) / previous) * 100
-        else:
-            change_pct = 0
-        
-        return {
-            "current_period": current,
-            "previous_period": previous,
-            "change_pct": round(change_pct, 1),
-            "direction": "increased" if change_pct > 5 else "decreased" if change_pct < -5 else "stable",
-            "period": "quarter"
-        }
-    
-    def _get_active_targets(self) -> List[Dict[str, Any]]:
-        """Get active reduction targets with detailed progress"""
-        targets = self.db.query(ReductionTarget).filter(
-            ReductionTarget.organization_id == self.organization_id,
-            ReductionTarget.is_active == True
-        ).limit(5).all()
-        
-        return [
-            {
-                "name": t.name,
-                "progress": float(t.progress_percentage) if t.progress_percentage else 0,
-                "status": t.status,
-                "target_year": t.target_year,
-                "baseline_year": t.baseline_year,
-                "baseline_value": float(t.baseline_value) if t.baseline_value else 0,
-                "target_value": float(t.target_value) if t.target_value else 0,
-                "current_value": float(t.current_value) if t.current_value else None,
-                "current_reduction_pct": float(t.current_reduction_pct) if t.current_reduction_pct else None,
-                "target_type": t.target_type,
-                "scope": t.scope
-            }
-            for t in targets
-        ]
-    
-    def _get_findings_summary(self) -> Dict[str, Any]:
-        """Get summary of audit findings"""
-        open_count = self.db.query(func.count(FlaggedEvent.id)).filter(
-            FlaggedEvent.organization_id == self.organization_id,
-            FlaggedEvent.status == "open"
-        ).scalar() or 0
-        
-        critical_count = self.db.query(func.count(FlaggedEvent.id)).filter(
-            FlaggedEvent.organization_id == self.organization_id,
-            FlaggedEvent.status == "open",
-            FlaggedEvent.severity == "critical"
-        ).scalar() or 0
-        
-        return {
-            "open": open_count,
-            "critical": critical_count,
-            "has_critical": critical_count > 0
-        }
-    
-    def _get_data_completeness(self) -> Dict[str, Any]:
-        """Get data completeness metrics"""
+        # Activity count
         activity_count = self.db.query(func.count(EmissionActivity.id)).join(
             Project
         ).filter(
             Project.organization_id == self.organization_id
         ).scalar() or 0
         
-        # Get months with data
-        months_with_data = self.db.query(
-            func.distinct(func.date_trunc('month', EmissionActivity.activity_date))
-        ).join(Project).filter(
-            Project.organization_id == self.organization_id
-        ).count()
-        
-        # Calculate completeness score
-        completeness = min((activity_count / 50) * 100, 100)  # 50 activities = 100%
-        
-        return {
-            "activity_count": activity_count,
-            "months_with_data": months_with_data,
-            "completeness_pct": round(completeness, 1),
-            "is_complete": completeness >= 80
-        }
-    
-    def _get_org_profile(self) -> Dict[str, Any]:
-        """Get organization profile for context"""
-        if not self.organization:
-            return {}
-        return {
-            "name": self.organization.name,
-            "industry": self.organization.industry,
-            "country": self.organization.country,
-            "emission_archetype": self.organization.emission_archetype
-        }
-    
-    def _get_projection_data(self) -> Dict[str, Any]:
-        """Get trajectory projections for active targets"""
-        try:
-            from app.services.trajectory_service import create_trajectory_service
-            trajectory_service = create_trajectory_service(self.db, self.organization_id)
-            
-            # Get all target trajectories
-            trajectories = trajectory_service.get_all_target_trajectories()
-            return {
-                "projections": trajectories,
-                "has_projections": len(trajectories) > 0
-            }
-        except Exception as e:
-            logger.warning(f"Failed to get projection data: {e}")
-            return {"projections": [], "has_projections": False}
-    
-    def _get_recent_anomalies(self, limit: int = 5) -> List[Dict[str, Any]]:
-        """Get recent flagged events/anomalies for context"""
-        events = self.db.query(FlaggedEvent).filter(
+        # Open findings count
+        findings_count = self.db.query(func.count(FlaggedEvent.id)).filter(
             FlaggedEvent.organization_id == self.organization_id,
             FlaggedEvent.status == "open"
-        ).order_by(FlaggedEvent.created_at.desc()).limit(limit).all()
+        ).scalar() or 0
         
-        return [
-            {
-                "title": e.title,
-                "severity": e.severity,
-                "flag_type": e.flag_type,
-                "description": e.description[:200] if e.description else None
-            }
-            for e in events
-        ]
-    
-    def _get_top_emission_sources(self, limit: int = 5) -> List[Dict[str, Any]]:
-        """Get top emission sources"""
-        results = self.db.query(
-            EmissionActivity.activity_type,
-            func.sum(EmissionActivity.co2e_kg).label('total')
-        ).join(Project).filter(
-            Project.organization_id == self.organization_id
-        ).group_by(
-            EmissionActivity.activity_type
-        ).order_by(
-            func.sum(EmissionActivity.co2e_kg).desc()
-        ).limit(limit).all()
+        # Active targets count
+        targets_count = self.db.query(func.count(ReductionTarget.id)).filter(
+            ReductionTarget.organization_id == self.organization_id,
+            ReductionTarget.is_active == True
+        ).scalar() or 0
         
-        total = self._get_total_emissions()
+        # Get archetype info
+        archetype = org.emission_archetype if org else None
+        archetype_info = get_archetype(archetype) if archetype else None
         
-        return [
-            {
-                "source": activity_type,
-                "emissions": float(emissions),
-                "percentage": round((float(emissions) / total) * 100, 1) if total > 0 else 0
-            }
-            for activity_type, emissions in results
-        ]
-    
-    def _get_archetype_info(self) -> Optional[Dict[str, Any]]:
-        """Get detailed archetype-specific information from config"""
-        archetype = self.organization.emission_archetype if self.organization else None
-        if not archetype:
-            return None
-        
-        fingerprint = get_archetype(archetype)
-        if not fingerprint:
-            return None
-        
-        # Return full fingerprint for rich RAG context
         return {
-            "name": fingerprint.display_name,
-            "archetype_id": fingerprint.name,
-            "industries": fingerprint.corresponding_industries,
-            "expected_activity_types": fingerprint.expected_activity_types,
-            "expected_scopes": fingerprint.expected_scopes,
-            "scope_distribution": fingerprint.scope_distribution,
-            "key_emission_signals": fingerprint.key_emission_signals,
-            "seasonal_patterns": fingerprint.seasonal_patterns,
-            "thresholds": fingerprint.thresholds
+            "org_id": str(self.organization_id),
+            "org_name": org.name if org else "Unknown",
+            "industry": org.industry if org else None,
+            "archetype": archetype,
+            "archetype_display": archetype_info.display_name if archetype_info else None,
+            "total_emissions": float(total) if total else 0.0,
+            "by_scope": by_scope,
+            "activity_count": activity_count,
+            "open_findings": findings_count,
+            "active_targets": targets_count
         }
     
-    def _format_offline_response(self, intent: str, facts: Dict[str, Any]) -> str:
-        """Format a deterministic response without LLM"""
-        template = OFFLINE_TEMPLATES.get(intent, OFFLINE_TEMPLATES[Intent.UNKNOWN])
+    async def _generate_sql_with_llm(self, message: str, context: Dict) -> Dict[str, Any]:
+        """Use Groq to understand intent and generate safe SQL"""
+        
+        prompt = f"""You are Carbon Copilot, a carbon accounting assistant for {context.get('org_name', 'this organization')}.
+
+{DATABASE_SCHEMA}
+
+ORGANIZATION CONTEXT:
+- Organization ID: {context.get('org_id')}
+- Total Emissions: {context.get('total_emissions', 0):,.0f} kg CO2e
+- Activity Count: {context.get('activity_count', 0)}
+- Open Findings: {context.get('open_findings', 0)}
+- Active Targets: {context.get('active_targets', 0)}
+
+CRITICAL SQL RULES - YOU MUST FOLLOW THESE EXACTLY:
+1. ONLY generate SELECT queries (read-only)
+2. For emission_activities, you MUST JOIN with projects table:
+   SELECT ea.* FROM emission_activities ea 
+   JOIN projects p ON p.id = ea.project_id 
+   WHERE p.organization_id = '{context.get('org_id')}'
+3. For flagged_events and reduction_targets, filter directly:
+   WHERE organization_id = '{context.get('org_id')}'
+4. Use LIMIT 50 maximum
+5. Return null for sql_query if no query needed
+
+EXAMPLE QUERIES:
+
+Query for specific activity type (e.g., "natural gas", "electricity", "fuel", "travel"):
+SELECT ea.activity_type, ea.description, ea.co2e_kg, ea.scope, ea.activity_date 
+FROM emission_activities ea 
+JOIN projects p ON p.id = ea.project_id 
+WHERE p.organization_id = '{context.get('org_id')}' 
+AND (ea.activity_type ILIKE '%natural_gas%' OR ea.description ILIKE '%natural gas%')
+LIMIT 50
+
+Query for top emissions:
+SELECT ea.activity_type, ea.description, ea.co2e_kg, ea.scope 
+FROM emission_activities ea 
+JOIN projects p ON p.id = ea.project_id 
+WHERE p.organization_id = '{context.get('org_id')}' 
+ORDER BY ea.co2e_kg DESC LIMIT 10
+
+Query for anomalies:
+SELECT title, description, recommendation, severity, flag_type 
+FROM flagged_events 
+WHERE organization_id = '{context.get('org_id')}' AND status = 'open' 
+LIMIT 50
+
+USER QUESTION: {message}
+
+Respond with valid JSON only:
+{{
+  "intent": "brief description (e.g., 'activity_query', 'top_emissions', 'anomalies', 'targets')",
+  "sql_query": "SELECT ... FROM ... WHERE ... LIMIT 50" or null,
+  "explanation": "what this query does"
+}}"""
+
+        try:
+            if not self.groq_client:
+                return {"intent": "error", "sql_query": None, "explanation": "Groq client unavailable"}
+            
+            response = self.groq_client.chat.completions.create(
+                model=settings.COPILOT_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=1000,
+                response_format={"type": "json_object"}
+            )
+            
+            result_text = response.choices[0].message.content
+            result = json.loads(result_text)
+            
+            logger.info(f"LLM generated intent: {result.get('intent')}, SQL: {result.get('sql_query', 'None')[:100] if result.get('sql_query') else 'None'}")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"SQL generation failed: {e}")
+            return {"intent": "error", "sql_query": None, "explanation": f"Failed to understand: {e}"}
+    
+    def _execute_safe_query(self, sql: str) -> Tuple[List[Dict], Optional[str]]:
+        """Execute validated read-only query with safety checks"""
+        
+        if not sql:
+            return [], None
+        
+        sql_upper = sql.upper()
+        
+        # Check for blocked operations
+        for blocked in SQL_BLOCKLIST:
+            if blocked in sql_upper:
+                return [], f"Blocked operation detected: {blocked}"
+        
+        # Must be a SELECT
+        if not sql_upper.strip().startswith('SELECT'):
+            return [], "Only SELECT queries are allowed"
+        
+        # Check for organization filter (security)
+        org_id_str = str(self.organization_id)
+        if org_id_str not in sql:
+            return [], "Query must filter by organization_id"
+        
+        # Add LIMIT if not present
+        if 'LIMIT' not in sql_upper:
+            sql = sql.rstrip(';') + ' LIMIT 50'
         
         try:
-            if intent == Intent.TOTAL_EMISSIONS:
-                by_scope = facts.get("by_scope", {})
-                scope_str = ", ".join([f"{k}: {v:,.0f} kg" for k, v in by_scope.items()])
-                return template.format(
-                    total=facts.get("total_emissions", 0),
-                    scope_breakdown=scope_str or "No scope breakdown available."
-                )
+            result = self.db.execute(text(sql))
+            rows = result.fetchall()
+            columns = result.keys()
             
-            elif intent == Intent.SCOPE_BREAKDOWN:
-                by_scope = facts.get("by_scope", {})
-                breakdown = ", ".join([f"{k}: {v:,.0f} kg CO₂e" for k, v in by_scope.items()])
-                return template.format(breakdown=breakdown or "No data available.")
+            # Convert to list of dicts
+            data = []
+            for row in rows:
+                row_dict = {}
+                for i, col in enumerate(columns):
+                    value = row[i]
+                    # Handle special types
+                    if isinstance(value, Decimal):
+                        value = float(value)
+                    elif isinstance(value, datetime):
+                        value = value.isoformat()
+                    elif isinstance(value, UUID):
+                        value = str(value)
+                    row_dict[col] = value
+                data.append(row_dict)
             
-            elif intent == Intent.TREND:
-                trend = facts.get("trend", {})
-                return template.format(
-                    direction=trend.get("direction", "remained stable"),
-                    pct=abs(trend.get("change_pct", 0)),
-                    period=f"the previous {trend.get('period', 'period')}"
-                )
+            logger.info(f"Query executed successfully, returned {len(data)} rows")
+            return data, None
             
-            elif intent == Intent.TARGET_PROGRESS:
-                targets = facts.get("targets", [])
-                if targets:
-                    t = targets[0]
-                    return template.format(
-                        name=t.get("name", "Target"),
-                        progress=t.get("progress", 0),
-                        status=t.get("status", "unknown")
-                    )
-                return "No active reduction targets found."
-            
-            elif intent == Intent.FINDINGS:
-                findings = facts.get("findings", {})
-                critical_note = f" ({findings.get('critical', 0)} critical)" if findings.get("has_critical") else ""
-                return template.format(
-                    count=findings.get("open", 0),
-                    critical_note=critical_note
-                )
-            
-            elif intent == Intent.DATA_STATUS:
-                comp = facts.get("completeness", {})
-                missing_note = ""
-                if comp.get("completeness_pct", 0) < 80:
-                    missing_note = "Consider uploading more data for a complete picture."
-                return template.format(
-                    completeness=comp.get("completeness_pct", 0),
-                    missing_note=missing_note
-                )
-            
-            elif intent == Intent.SUGGEST:
-                archetype_info = facts.get("archetype_info", {})
-                top_sources = facts.get("top_sources", [])
-                areas = ", ".join([s["source"] for s in top_sources[:3]]) or "energy efficiency"
-                return template.format(
-                    archetype=archetype_info.get("name", "your") if archetype_info else "your",
-                    areas=areas
-                )
-            
-            else:
-                # Unknown intent - return summary
-                return f"Your total emissions are {facts.get('total_emissions', 0):,.0f} kg CO₂e."
-                
-        except Exception as e:
-            logger.warning(f"Template formatting failed: {e}")
-            return f"Your total emissions are {facts.get('total_emissions', 0):,.0f} kg CO₂e."
+        except SQLAlchemyError as e:
+            logger.error(f"Query execution error: {e}")
+            return [], f"Query error: {str(e)[:100]}"
     
-    def _should_use_llm(self, intent: str, history: List[Dict]) -> bool:
-        """Determine if LLM should be used for this request"""
-        # Use LLM for all meaningful intents to provide semantic responses
-        # Only skip for UNKNOWN where we have no context
-        if intent == Intent.UNKNOWN:
-            return False
-        
-        # Limit LLM calls in conversation (max 2 per 5 messages to avoid quota issues)
-        recent_llm = sum(1 for m in history[-5:] if m.get("source") == "llm")
-        return recent_llm < 2
-    
-    async def _get_llm_explanation(
+    async def _generate_response_with_llm(
         self,
         message: str,
-        facts: Dict[str, Any],
+        context: Dict,
+        query_data: List[Dict],
+        query_error: Optional[str],
         intent: str
-    ) -> Any:
-        """Get LLM explanation for the facts"""
+    ) -> str:
+        """Generate natural language response using Groq"""
         
-        # Build context-aware prompt
-        prompt = self._build_explanation_prompt(message, facts)
+        # Build data summary
+        data_summary = ""
+        if query_error:
+            data_summary = f"Query failed: {query_error}"
+        elif query_data:
+            # Summarize first few rows
+            sample = query_data[:10]
+            data_summary = f"Query returned {len(query_data)} results:\n{json.dumps(sample, indent=2, default=str)}"
+        else:
+            data_summary = "No specific query data retrieved."
         
-        # Use cache key based on message and key facts
-        cache_key = f"{self.organization_id}:{intent}:{facts.get('total_emissions', 0):.0f}"
-        
-        return await self.llm_router.call(
-            task=LLMTask.CHAT_EXPLAIN,
-            prompt=prompt,
-            cache_key=cache_key
-        )
+        prompt = f"""You are Carbon Copilot for {context.get('org_name')}.
+
+ORGANIZATION SUMMARY:
+- Total Emissions: {context.get('total_emissions', 0):,.0f} kg CO2e
+- Scope Breakdown: {json.dumps(context.get('by_scope', {}), default=str)}
+- Activities: {context.get('activity_count', 0)}
+- Open Findings: {context.get('open_findings', 0)}
+- Active Targets: {context.get('active_targets', 0)}
+
+QUERY RESULTS:
+{data_summary}
+
+USER QUESTION: {message}
+
+INSTRUCTIONS:
+- Answer the question directly based on the data above
+- NEVER make up numbers - only use provided data
+- Be concise (2-4 sentences)
+- If this is about anomalies/findings, explain what the issue is and how to fix it
+- For emission_factor_missing findings, guide user on valid activity format for Climatiq calculation
+- Use metrics and specifics when available
+
+Respond naturally:"""
+
+        try:
+            if not self.groq_client:
+                return "I'm unable to generate a response at this time."
+            
+            response = self.groq_client.chat.completions.create(
+                model=settings.COPILOT_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=500
+            )
+            
+            return response.choices[0].message.content.strip()
+            
+        except Exception as e:
+            logger.error(f"Response generation failed: {e}")
+            
+            # Fallback response
+            if query_data:
+                return f"Found {len(query_data)} results for your query. Total emissions: {context.get('total_emissions', 0):,.0f} kg CO2e."
+            return f"Your organization has {context.get('total_emissions', 0):,.0f} kg CO2e total emissions across {context.get('activity_count', 0)} activities."
     
-    def _build_explanation_prompt(self, message: str, facts: Dict[str, Any]) -> str:
-        """Build a comprehensive prompt for LLM with full RAG context"""
-        
-        # Build org profile section
-        org_profile = facts.get("org_profile", {})
-        org_section = f"""## Organization Profile
-- Name: {org_profile.get('name', 'Unknown')}
-- Industry: {org_profile.get('industry', 'Not specified')}
-- Country: {org_profile.get('country', 'Not specified')}
-- Archetype: {org_profile.get('emission_archetype', 'Not specified')}"""
-        
-        # Build archetype context section
-        archetype_info = facts.get("archetype_info", {})
-        archetype_section = ""
-        if archetype_info:
-            archetype_section = f"""
-## Industry Archetype: {archetype_info.get('name', 'Unknown')}
-- Typical Industries: {', '.join(archetype_info.get('industries', [])[:3])}
-- Expected Activity Types: {', '.join(archetype_info.get('expected_activity_types', []))}
-- Expected Scope Distribution: {json.dumps(archetype_info.get('scope_distribution', {}), default=str)}
-- Key Emission Signals: {', '.join(archetype_info.get('key_emission_signals', [])[:4])}"""
-        
-        # Build targets section if available
-        targets = facts.get("targets", [])
-        targets_section = ""
-        if targets:
-            target_lines = []
-            for t in targets[:3]:
-                status = t.get('status', 'unknown')
-                progress = t.get('progress', 0)
-                target_lines.append(
-                    f"  - {t.get('name')}: {progress:.0f}% complete, status={status}, target year={t.get('target_year')}"
-                )
-            targets_section = f"""
-## Reduction Targets
-{chr(10).join(target_lines)}"""
-        
-        # Build projections section if available
-        projections = facts.get("projections", {})
-        proj_section = ""
-        if projections.get("has_projections"):
-            proj_list = projections.get("projections", [])
-            if proj_list:
-                proj_lines = []
-                for p in proj_list[:3]:
-                    will_achieve = "WILL achieve" if p.get("status") == "on_track" else "may MISS"
-                    proj_lines.append(f"  - {p.get('target_name', 'Target')}: {will_achieve} target at current rate")
-                proj_section = f"""
-## Trajectory Projections
-{chr(10).join(proj_lines)}"""
-        
-        # Build anomalies section if available
-        anomalies = facts.get("recent_anomalies", [])
-        anomalies_section = ""
-        if anomalies:
-            anomaly_lines = [f"  - [{a.get('severity', 'info').upper()}] {a.get('title', 'Unknown')}" for a in anomalies[:3]]
-            anomalies_section = f"""
-## Recent Findings ({len(anomalies)} open)
-{chr(10).join(anomaly_lines)}"""
-        
-        return f"""You are Carbon Copilot, an expert carbon accounting assistant for {org_profile.get('name', 'this organization')}. 
-Based on the ACTUAL DATA below, answer the user's question with insight and context.
-
-{org_section}
-{archetype_section}
-
-## Emissions Data (FACTS - do not hallucinate)
-- Total Emissions: {facts.get('total_emissions', 0):,.0f} kg CO₂e
-- Scope Breakdown: {json.dumps(facts.get('by_scope', {}), default=str)}
-- Top Sources: {json.dumps(facts.get('top_sources', [])[:3], default=str)}
-{targets_section}
-{proj_section}
-{anomalies_section}
-
-## User Question
-{message}
-
-## Instructions
-- ONLY use the data provided above - NEVER make up numbers
-- Provide specific, actionable insights based on the organization's archetype and data
-- Reference specific values when relevant
-- Be concise but informative (2-4 sentences)
-- If asked about projections/forecasts, use the trajectory data if available
-"""
-    
-    def _get_quick_suggestions(self, intent: str, facts: Dict[str, Any]) -> List[str]:
-        """Get follow-up suggestions based on context"""
+    def _get_suggestions(self, intent: str, data: List[Dict]) -> List[str]:
+        """Generate follow-up suggestions based on context"""
         suggestions = []
         
-        if facts.get("total_emissions", 0) == 0:
-            suggestions.append("Upload emission data to get started")
+        if intent in ["top_emissions", "scope_breakdown", "unknown"]:
+            suggestions.append("What are my anomalies?")
+            suggestions.append("How are my reduction targets?")
+        elif intent in ["anomalies", "findings"]:
+            suggestions.append("Show my top emissions")
+            suggestions.append("What's my Scope 3 breakdown?")
+        elif intent in ["targets", "reduction"]:
+            suggestions.append("What activities contribute most?")
+            suggestions.append("Any issues to address?")
+        else:
+            suggestions.append("What are my total emissions?")
+            suggestions.append("Show my anomalies")
         
-        elif intent == Intent.TOTAL_EMISSIONS:
-            suggestions.append("Show me the trend")
-            suggestions.append("What are my biggest emission sources?")
-        
-        elif intent == Intent.TREND:
-            suggestions.append("How can I reduce emissions?")
-            suggestions.append("Show my targets")
-        
-        elif intent == Intent.TARGET_PROGRESS:
-            targets = facts.get("targets", [])
-            if any(t.get("status") == "at_risk" for t in targets):
-                suggestions.append("Generate reduction strategies")
-        
-        elif intent == Intent.FINDINGS:
-            findings = facts.get("findings", {})
-            if findings.get("critical", 0) > 0:
-                suggestions.append("Explain critical findings")
-        
-        return suggestions[:3]  # Max 3 suggestions
+        return suggestions[:3]
 
 
 def create_copilot_service(db: Session, organization_id: UUID, redis_client=None) -> CopilotService:

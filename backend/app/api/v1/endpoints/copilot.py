@@ -377,13 +377,17 @@ class ChatRequest(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    """Chat response with data and optional LLM explanation"""
+    """Chat response with data and LLM-generated insights"""
     text: str
     intent: str
     data: Dict[str, Any]
-    source: str  # "deterministic", "llm", "cache", "budget_exceeded"
+    source: str  # "llm", "error", "rate_limit"
     model: Optional[str]
     suggestions: List[str]
+    query_executed: Optional[str] = None  # SQL query that was run
+    rows_returned: Optional[int] = None   # Number of results
+    rate_limited: bool = False            # True if rate limit exceeded
+    reset_at: Optional[str] = None        # ISO timestamp when limit resets
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -395,17 +399,14 @@ async def chat_with_copilot(
     """
     Chat with Carbon Copilot
     
-    Provides context-aware responses based on organization's emission data.
-    Uses SQL-first approach with optional LLM explanation.
+    LLM-powered natural language interface for emission data queries.
+    Uses Groq to understand questions and generate dynamic SQL queries.
     
-    Intent Classification (deterministic):
-    - total_emissions: "What are my total emissions?"
-    - scope_breakdown: "Show by scope"
-    - trend: "Are emissions increasing?"
-    - target_progress: "How are my targets doing?"
-    - findings: "Any issues?"
-    - explain: "Why did X happen?"
-    - suggest: "How can I reduce?"
+    Features:
+    - Natural language understanding
+    - Dynamic SQL generation (read-only)
+    - Rate limiting with cooldown notifications
+    - Activity-level and anomaly context
     """
     from app.services.copilot_service import create_copilot_service
     
@@ -413,7 +414,7 @@ async def chat_with_copilot(
         copilot = create_copilot_service(
             db=db,
             organization_id=current_user.organization_id,
-            redis_client=None  # TODO: Add Redis when available
+            redis_client=None
         )
         
         result = await copilot.chat(
@@ -428,18 +429,22 @@ async def chat_with_copilot(
             data=result["data"],
             source=result["source"],
             model=result.get("model"),
-            suggestions=result.get("suggestions", [])
+            suggestions=result.get("suggestions", []),
+            query_executed=result.get("query_executed"),
+            rows_returned=result.get("rows_returned"),
+            rate_limited=result.get("rate_limited", False),
+            reset_at=result.get("reset_at")
         )
         
     except Exception as e:
         logger.error(f"Copilot chat error: {e}")
-        # Return offline fallback on error
         return ChatResponse(
             text="I'm having trouble accessing your data. Please try again.",
             intent="error",
             data={},
             source="error",
             model=None,
-            suggestions=["Try again", "Check your data uploads"]
+            suggestions=["Try again", "Check your data uploads"],
+            rate_limited=False
         )
 

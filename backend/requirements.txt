@@ -13,6 +13,7 @@ asyncpg==0.29.0
 # Async HTTP Client
 httpx==0.26.0
 tenacity==8.2.3
+groq==0.4.2
 
 # Celery & Redis
 celery==5.3.6

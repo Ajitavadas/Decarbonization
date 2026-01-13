@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     # Cache TTL (seconds)
     EMISSION_FACTOR_CACHE_TTL: int = 86400  # 24 hours
     
+    # Copilot LLM Settings
+    COPILOT_MODEL: str = "llama-3.1-8b-instant"  # Can switch to llama-3.3-70b-versatile
+    COPILOT_MAX_QUERIES_PER_HOUR: int = 50  # Per organization
+    COPILOT_RATE_LIMIT_WINDOW_SECONDS: int = 3600  # 1 hour
+    
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
 

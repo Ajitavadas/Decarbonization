@@ -515,6 +515,7 @@ async def upload_csv(
                     co2e_kg=co2e,
                     region=region,
                     year=str(year),
+                    description=description,  # Store original CSV description for copilot search
                     content_hash=content_hash,  # Add hash for future dedup checks
                     input_data={
                         "description": description,
