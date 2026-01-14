@@ -19,6 +19,7 @@ from app.models.reduction_strategy import ReductionStrategy
 from app.models.activity import EmissionActivity
 from app.models.organization import Organization
 from app.services.groq_service import GroqService
+from app.services.org_context_builder import OrgContextBuilder
 from app.core.archetype_config import get_archetype
 
 logger = logging.getLogger(__name__)
@@ -336,18 +337,36 @@ class ReductionService:
         target: ReductionTarget,
         max_strategies: int
     ) -> List[Dict[str, Any]]:
-        """Call Groq 70b model for strategy generation"""
+        """
+        Call Groq 70b model for strategy generation using enhanced context
         
-        # Get archetype fingerprint for context
-        archetype_info = get_archetype(self.archetype) if self.archetype else None
+        Uses OrgContextBuilder for comprehensive organization context instead
+        of the previous minimal archetype-only approach.
+        """
+        # Build comprehensive organization context
+        context_builder = OrgContextBuilder(self.db, self.organization_id)
+        org_context = context_builder.build_context(project_id=target.project_id)
+        org_context_payload = org_context.to_ai_payload()
         
-        # Build detailed prompt
-        prompt = self._build_strategy_prompt(target, archetype_info, max_strategies)
+        # Add target-specific info that OrgContextBuilder doesn't include
+        org_context_payload["target_context"] = {
+            "name": target.name,
+            "type": target.target_type,
+            "scope": target.scope,
+            "baseline_year": target.baseline_year,
+            "baseline_value": float(target.baseline_value),
+            "target_year": target.target_year,
+            "target_value": float(target.target_value),
+            "current_value": float(target.current_value) if target.current_value else None,
+            "progress_pct": float(target.progress_percentage) if target.progress_percentage else None,
+            "status": target.status,
+        }
         
-        # Call Groq with quality model
-        response = await self.groq_service.generate_strategies(
-            prompt=prompt,
-            use_quality_model=True
+        # Use the enhanced strategy generation with archetype-specific prompts
+        response = await self.groq_service.generate_strategies_enhanced(
+            archetype=self.archetype or "generic",
+            org_context=org_context_payload,
+            max_strategies=max_strategies
         )
         
         return response.get('strategies', [])

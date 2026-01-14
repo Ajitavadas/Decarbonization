@@ -9,6 +9,7 @@ import uuid
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from uuid import UUID
+from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
@@ -18,6 +19,7 @@ from app.models.flagged_event import FlaggedEvent
 from app.services.gap_detector import create_gap_detector
 from app.services.anomaly_detector import create_anomaly_detector
 from app.services.groq_service import GroqService
+from app.services.org_context_builder import OrgContextBuilder
 from app.core.archetype_config import get_archetype, infer_archetype_from_industry
 
 logger = logging.getLogger(__name__)
@@ -145,68 +147,96 @@ class AuditorService:
         return results
     
     async def _run_ai_analysis(self, project_id: Optional[UUID] = None) -> List[Dict[str, Any]]:
-        """Run AI-powered contextual analysis"""
-        from app.models.activity import EmissionActivity
+        """
+        Run AI-powered contextual analysis using enhanced context
         
-        # Get activities for analysis
-        query = self.db.query(EmissionActivity).join(Project).filter(
-            Project.organization_id == self.organization_id
-        )
+        Uses OrgContextBuilder for stratified sampling and full org context
+        instead of the previous limited 20-activity sample.
+        """
+        # Build comprehensive organization context with stratified sampling
+        context_builder = OrgContextBuilder(self.db, self.organization_id)
+        org_context = context_builder.build_context(project_id=project_id)
+        org_context_payload = org_context.to_ai_payload()
         
-        if project_id:
-            query = query.filter(Project.id == project_id)
-        
-        activities = query.limit(100).all()  # Limit for API token management
-        
-        if not activities:
+        # Check if we have any activities
+        if not org_context.stratified_activities:
+            logger.info("No activities for AI analysis")
             return []
         
-        # Prepare data for Gemini
-        activity_data = [
-            {
-                "id": str(a.id),
-                "activity_type": a.activity_type,
-                "scope": a.scope,
-                "co2e_kg": float(a.co2e_kg) if a.co2e_kg else 0,
-                "activity_date": a.activity_date.isoformat() if a.activity_date else None,
-                "description": (a.input_data or {}).get("description", "")[:100],
-                "amount": (a.input_data or {}).get("amount"),
-                "unit": (a.input_data or {}).get("unit"),
-            }
-            for a in activities
-        ]
-        
-        organization_context = {
-            "industry": self.organization.industry,
-            "country": self.organization.country,
-            "name": self.organization.name
-        }
-        
-        # Call Groq
+        # Call enhanced Groq analysis
         groq_service = GroqService()
-        result = await groq_service.analyze_anomalies(
-            activity_data=activity_data,
-            archetype=self.archetype or "unknown",
-            organization_context=organization_context
+        result = await groq_service.analyze_anomalies_enhanced(
+            org_context=org_context_payload
         )
         
-        # Convert Groq findings to our format
+        # Convert Groq findings to our enhanced format with AI verdict
         ai_findings = []
         for finding in result.get("findings", []):
+            # Map AI verdict to flag_type
+            verdict = finding.get("verdict", "D")
+            flag_type_map = {
+                "A": "data_quality",
+                "B": "operational_anomaly", 
+                "C": "seasonal_variation",
+                "D": "high_emission"
+            }
+            
+            # Determine severity based on verdict and confidence
+            confidence = finding.get("confidence", "M")
+            co2e_est = finding.get("co2e_90d_est_kg", 0)
+            
+            if verdict == "A" or co2e_est > 10000:  # Data quality or high impact
+                severity = "critical"
+            elif verdict == "B" or co2e_est > 1000:
+                severity = "warning"
+            else:
+                severity = "info"
+            
             ai_findings.append({
-                "flag_type": finding.get("type", "anomaly"),
-                "severity": finding.get("severity", "info"),
-                "rule_id": "ai_contextual_analysis",
-                "title": finding.get("title", "AI-detected issue"),
-                "description": finding.get("description", ""),
-                "recommendation": finding.get("recommendation", ""),
+                "flag_type": flag_type_map.get(verdict, "anomaly"),
+                "severity": severity,
+                "rule_id": "ai_enhanced_analysis",
+                "title": finding.get("explanation", "AI-detected issue")[:100],
+                "description": finding.get("explanation", ""),
+                "recommendation": finding.get("immediate_action", ""),
                 "evidence": {
                     "ai_provider": "groq",
-                    "confidence": result.get("confidence", 0),
-                    "affected_activities": finding.get("affected_activities", [])
-                }
+                    "ai_model": "llama-3.3-70b-versatile",
+                    "confidence": confidence,
+                    "required_evidence": finding.get("required_evidence", []),
+                    "co2e_90d_estimate": co2e_est,
+                },
+                # New AI verdict fields
+                "ai_verdict": verdict,
+                "ai_confidence": confidence,
+                "required_evidence": finding.get("required_evidence", []),
+                "co2e_90d_estimate": co2e_est,
+                "immediate_action": finding.get("immediate_action", ""),
+                "next_action": finding.get("next_action", ""),
+                "activity_id": finding.get("activity_id"),
             })
         
+        # Also add top actions as separate recommendations
+        for action in result.get("top_actions", []):
+            ai_findings.append({
+                "flag_type": "recommendation",
+                "severity": "info",
+                "rule_id": "ai_top_action_recommendation",
+                "title": action.get("action", "Recommended action")[:100],
+                "description": action.get("action", ""),
+                "recommendation": f"Estimated reduction: {action.get('estimated_annual_co2e_reduction_kg', 0):,.0f} kg CO2e/year. Effort: {action.get('effort_estimate', 'unknown')}.",
+                "evidence": {
+                    "ai_provider": "groq",
+                    "confidence": action.get("confidence", "M"),
+                    "target_impacted": action.get("target_impacted"),
+                    "estimated_reduction_kg": action.get("estimated_annual_co2e_reduction_kg", 0),
+                    "effort_estimate": action.get("effort_estimate", "unknown"),
+                },
+                "ai_verdict": "D",  # Recommendations are always mitigation-focused
+                "ai_confidence": action.get("confidence", "M"),
+            })
+        
+        logger.info(f"Enhanced AI analysis generated {len(ai_findings)} findings")
         return ai_findings
     
     def _persist_findings(
@@ -241,7 +271,7 @@ class AuditorService:
                 )
                 
                 # For AI findings, also match on title since they share the same rule_id
-                if rule_id == "ai_contextual_analysis":
+                if rule_id in ["ai_contextual_analysis", "ai_enhanced_analysis", "ai_top_action_recommendation"]:
                     existing_query = existing_query.filter(
                         FlaggedEvent.title == title
                     )
@@ -265,6 +295,11 @@ class AuditorService:
                     logger.debug(f"Skipping duplicate finding: {rule_id}")
                     continue
                 
+                # Handle co2e estimate - convert to Decimal if present
+                co2e_estimate = finding.get("co2e_90d_estimate")
+                if co2e_estimate is not None:
+                    co2e_estimate = Decimal(str(co2e_estimate))
+                
                 flagged_event = FlaggedEvent(
                     organization_id=self.organization_id,
                     project_id=project_id,
@@ -277,7 +312,15 @@ class AuditorService:
                     recommendation=finding.get("recommendation"),
                     evidence=finding.get("evidence"),
                     audit_run_id=audit_run_id,
-                    status="open"
+                    status="open",
+                    # New AI verdict fields
+                    ai_verdict=finding.get("ai_verdict"),
+                    ai_verdict_explanation=finding.get("description"),
+                    required_evidence=finding.get("required_evidence"),
+                    co2e_90d_estimate=co2e_estimate,
+                    ai_confidence=finding.get("ai_confidence"),
+                    immediate_action=finding.get("immediate_action"),
+                    next_action=finding.get("next_action"),
                 )
                 
                 self.db.add(flagged_event)

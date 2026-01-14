@@ -52,7 +52,7 @@ class ReductionTarget(Base):
     # Current tracking
     current_year = Column(String(4), nullable=True)
     current_value = Column(Numeric(20, 6), nullable=True)  # Latest calculated kg CO2e
-    current_reduction_pct = Column(Numeric(5, 2), nullable=True)  # Current % reduction from baseline
+    current_reduction_pct = Column(Numeric(12, 2), nullable=True)  # Current % reduction from baseline (can be very large)
     
     # Progress calculation
     progress_percentage = Column(Numeric(5, 2), nullable=True)  # 0-100 (progress toward final target)

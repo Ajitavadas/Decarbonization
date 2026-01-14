@@ -39,9 +39,9 @@ class TargetCreateRequest(BaseModel):
     target_type: str = Field(..., pattern="^(absolute|percentage)$")
     scope: Optional[str] = Field("all", pattern="^(Scope 1|Scope 2|Scope 3|all)$")
     baseline_year: str = Field(..., pattern="^\\d{4}$")
-    baseline_value: float = Field(..., gt=0)
+    baseline_value: float = Field(..., ge=0)  # Allow 0 for new orgs
     target_year: str = Field(..., pattern="^\\d{4}$")
-    target_value: float = Field(..., gt=0)
+    target_value: float = Field(..., ge=0)  # Allow 0 for absolute zero targets
     milestones: Optional[List[MilestoneSchema]] = []
     project_id: Optional[UUID] = None
 

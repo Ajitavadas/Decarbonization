@@ -70,12 +70,26 @@ async def validation_exception_handler(
     exc: Union[RequestValidationError, ValidationError]
 ) -> JSONResponse:
     """Global handler for Pydantic validation errors"""
+    # Convert errors to JSON-safe format (handle bytes objects)
+    def make_json_safe(obj):
+        if isinstance(obj, bytes):
+            return obj.decode('utf-8', errors='replace')
+        elif isinstance(obj, dict):
+            return {k: make_json_safe(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [make_json_safe(item) for item in obj]
+        elif isinstance(obj, tuple):
+            return tuple(make_json_safe(item) for item in obj)
+        return obj
+    
+    errors = make_json_safe(exc.errors())
+    
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
             "error": "ValidationError",
             "message": "Request validation failed",
-            "details": exc.errors(),
+            "details": errors,
             "path": str(request.url)
         }
     )

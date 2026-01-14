@@ -14,6 +14,7 @@ from app.models.reduction_strategy import ReductionStrategy
 from app.models.copilot_cache import CopilotCache
 from app.models.activity_baseline import ActivityBaseline
 from app.models.suppression_rule import SuppressionRule
+from app.models.regional_factor import RegionalFactor
 
 __all__ = [
     "User", 
@@ -28,5 +29,6 @@ __all__ = [
     "CopilotCache",
     "ActivityBaseline",
     "SuppressionRule",
+    "RegionalFactor",
 ]
 

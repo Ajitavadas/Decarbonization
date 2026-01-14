@@ -266,19 +266,36 @@ Example:
         description: str,
         unit: str,
         category: str = "",
-        region: str = "US"
+        region: str = None  # REQUIRED - will be validated
     ) -> Dict[str, Any]:
         """
         Classify an activity for Climatiq API routing.
         
+        Args:
+            description: Activity description
+            unit: Unit of measurement
+            category: Optional category
+            region: ISO 3166-1 Alpha-2 or extended code (REQUIRED)
+            
+        Raises:
+            ValueError: If region is not provided
+        
         Returns comprehensive classification including:
         - scope: 1, 2, or 3
-        - endpoint: "fuel", "electricity", "heat_steam", "estimate", "freight", "autopilot"
-        - parameter_type: "energy", "volume", "weight", "distance", "money", "passengers_distance"
-        - fuel_type: (for fuel endpoint) "diesel", "lpg", "natural_gas", etc.
+        - endpoint: \"fuel\", \"electricity\", \"heat_steam\", \"estimate\", \"freight\", \"autopilot\"
+        - parameter_type: \"energy\", \"volume\", \"weight\", \"distance\", \"money\", \"passengers_distance\"
+        - fuel_type: (for fuel endpoint) \"diesel\", \"lpg\", \"natural_gas\", etc.
         - activity_search: Keywords to search for activity_id
         - normalized_description: Cleaned description for Autopilot
         """
+        # Region is mandatory - no fallbacks
+        if not region or not region.strip():
+            raise ValueError(
+                "Region is required for emission calculations. "
+                "Provide an ISO 3166-1 Alpha-2 code (e.g., US, IN, GB) or extended code (US-CA)."
+            )
+        region = region.strip().upper()
+        
         prompt = f"""You are an expert in carbon emissions calculation and the Climatiq API.
 
 Analyze this activity and determine the best Climatiq API endpoint and parameters:

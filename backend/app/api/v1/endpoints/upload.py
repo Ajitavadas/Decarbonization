@@ -266,6 +266,15 @@ async def upload_csv(
         # This handles CSV files with varying column name cases (e.g., "Description" vs "description")
         df.columns = df.columns.str.lower().str.strip()
         
+        # MANDATORY REGION VALIDATION
+        # Region is required for accurate emission calculations - no fallbacks
+        if 'region' not in df.columns:
+            raise HTTPException(
+                status_code=400, 
+                detail="CSV must include a 'region' column. Region is required for accurate emission calculations. "
+                       "Use ISO 3166-1 Alpha-2 codes (e.g., US, IN, GB, DE) or extended codes (US-CA, US-NY)."
+            )
+        
         # Initialize services
         unit_normalizer = UnitNormalizer()
         ai_classifier = AIScopeClassifierService()
@@ -310,11 +319,28 @@ async def upload_csv(
         
         for idx, row in df.iterrows():
             try:
-                # Extract and validate data
+                # Extract and validate data - REGION IS MANDATORY
                 description = str(row.get("description", ""))
                 amount = parse_number(row.get("amount", 0))
                 unit = str(row.get("unit", ""))
-                region = str(row.get("region", "")) if pd.notna(row.get("region")) else None
+                
+                # Region extraction - MANDATORY, no fallbacks
+                region_raw = row.get("region")
+                if pd.isna(region_raw) or str(region_raw).strip() == "":
+                    raise ValueError(
+                        f"Row {idx}: 'region' is required but missing or empty. "
+                        f"Use ISO 3166-1 Alpha-2 codes (e.g., US, IN, GB). "
+                        f"Activity: '{description[:50]}...'"
+                    )
+                region = str(region_raw).strip().upper()  # Normalize to uppercase
+                
+                # Validate region format (basic check)
+                if len(region) < 2 or len(region) > 6:
+                    raise ValueError(
+                        f"Row {idx}: Invalid region '{region}'. "
+                        f"Use ISO 3166-1 Alpha-2 (US, IN) or extended (US-CA) codes."
+                    )
+                
                 year = int(row.get("year")) if pd.notna(row.get("year")) else datetime.now().year
                 activity_date_str = str(row.get("activity_date", "")) if pd.notna(row.get("activity_date")) else None
                 
@@ -352,11 +378,12 @@ async def upload_csv(
                     category = str(row.get("category", "")) if pd.notna(row.get("category")) else ""
                     
                     # Use the new comprehensive classification method
+                    # Region is now guaranteed to exist (validated above)
                     climatiq_classification = await ai_classifier.classify_for_climatiq(
                         description=description,
                         unit=unit,
                         category=category,
-                        region=region or "US"
+                        region=region  # No fallback - region is mandatory
                     )
                     print(f"  AI Classification result: {climatiq_classification}")
                     
