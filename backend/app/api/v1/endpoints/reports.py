@@ -149,6 +149,6 @@ async def get_available_columns(
         },
         "detailed_list": {
             "name": "Detailed Activity List",
-            "columns": ["#", "Type", "Scope", "Quantity", "Unit", "CO2e (kg)", "Calc Method", "EF (kgCO2e/unit)", "Region", "Date"]
+            "columns": ["#", "Type", "Emission Source", "Scope", "Quantity", "Unit", "EF (kgCO2e/unit)", "CO2e (kg)", "Calc Method", "Region", "Date"]
         }
     }

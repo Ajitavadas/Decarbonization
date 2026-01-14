@@ -220,41 +220,35 @@ class ReportGenerator:
             if desc and desc not in ['N/A', None, '']:
                 source_name = desc
         
-        # Priority 3: Use Climatiq emission factor name
+        # Priority 3: Use Climatiq emission factor name from calculation_response
         if not source_name:
-            autopilot = input_data.get('autopilot_response', {}) if isinstance(input_data.get('autopilot_response', {}), dict) else {}
-            if autopilot:
-                ef = autopilot.get('emission_factor') or autopilot.get('emissionFactor')
-                if isinstance(ef, dict):
-                    source_name = ef.get('name') or ef.get('activity_id') or ef.get('id')
-                
-                estimate = autopilot.get('estimate', {}) if isinstance(autopilot.get('estimate', {}), dict) else {}
-                if not source_name and estimate:
-                    ef_details = estimate.get('emission_factor') or estimate.get('emissionFactor')
-                    if isinstance(ef_details, dict):
-                        source_name = ef_details.get('name') or ef_details.get('activity_id')
+            calc_response = input_data.get('calculation_response', {}) if isinstance(input_data.get('calculation_response', {}), dict) else {}
+            if calc_response:
+                estimate = calc_response.get('estimate', {}) if isinstance(calc_response.get('estimate', {}), dict) else {}
+                if estimate:
+                    ef = estimate.get('emission_factor') or estimate.get('emissionFactor')
+                    if isinstance(ef, dict):
+                        source_name = ef.get('name') or ef.get('activity_id') or ef.get('id')
         
         # Priority 4: Use database fields or activity type
         if not source_name:
             source_name = activity.get('emission_factor_id') or activity.get('type', 'Unknown Activity')
         
-        # Get data source from Climatiq metadata
-        autopilot = input_data.get('autopilot_response', {}) if isinstance(input_data.get('autopilot_response', {}), dict) else {}
-        if autopilot:
-            ef = autopilot.get('emission_factor') or autopilot.get('emissionFactor')
-            if isinstance(ef, dict):
-                data_source = ef.get('source') or ef.get('source_dataset') or ef.get('data_version')
-            
-            if not data_source:
-                estimate = autopilot.get('estimate', {}) if isinstance(autopilot.get('estimate', {}), dict) else {}
-                ef_details = estimate.get('emission_factor') if estimate else None
-                if isinstance(ef_details, dict):
-                    data_source = ef_details.get('source') or ef_details.get('source_dataset')
+        # Get data source from calculation_response.estimate.emission_factor.source
+        calc_response = input_data.get('calculation_response', {}) if isinstance(input_data.get('calculation_response', {}), dict) else {}
+        if calc_response:
+            estimate = calc_response.get('estimate', {}) if isinstance(calc_response.get('estimate', {}), dict) else {}
+            if estimate:
+                ef = estimate.get('emission_factor') or estimate.get('emissionFactor')
+                if isinstance(ef, dict):
+                    # Try to get source from emission_factor
+                    data_source = ef.get('source') or ef.get('source_dataset') or ef.get('data_version')
         
+        # Fallback to database fields
         if not data_source:
-            data_source = activity.get('source_dataset') or 'Climatiq API'
+            data_source = activity.get('source_dataset') or activity.get('data_version') or 'Climatiq API'
 
-        return source_name or 'Unknown', data_source
+        return source_name or 'Unknown', data_source or 'Climatiq API'
 
     def _build_activity_summary_rows(self) -> List[List[str]]:
         """Prepare rows for activity data summary grouped by scope"""
@@ -709,6 +703,108 @@ class ReportGenerator:
         elements.append(KeepTogether([viz_heading, Spacer(1, 12), img]))
         elements.append(PageBreak())
         
+        # Detailed Activities Table - MOVED TO FIRST POSITION
+        detail_heading = Paragraph("Detailed Activity List", heading_style)
+        
+        # Define cell styles for text wrapping
+        cell_style = ParagraphStyle(
+            'DetailCell',
+            parent=styles['Normal'],
+            fontSize=6,
+            leading=8,
+            alignment=TA_CENTER,
+        )
+        header_cell_style = ParagraphStyle(
+            'DetailHeaderCell',
+            parent=styles['Normal'],
+            fontSize=6,
+            leading=8,
+            alignment=TA_CENTER,
+        )
+        
+        detailed_data_raw = [['#', 'Type', 'Emission Source', 'Scope', 'Quantity', 'Unit', 'EF (kgCO2e/unit)', 'CO2e (kg)', 'Calc Method', 'Region', 'Date']]
+        for i, activity in enumerate(self.activities, 1):
+            # Extract quantity and unit from input_data
+            input_data = activity.get('input_data', {})
+            quantity = None
+            unit = 'N/A'
+            
+            # Try different possible field names in input_data
+            if isinstance(input_data, dict):
+                # Check for common quantity fields
+                for qty_field in ['energy', 'volume', 'weight', 'distance', 'money', 'amount']:
+                    if qty_field in input_data:
+                        try:
+                            quantity = float(input_data[qty_field])
+                        except (TypeError, ValueError):
+                            pass
+                        if quantity is not None:
+                            break
+                
+                # Check for common unit fields
+                for unit_field in ['energy_unit', 'volume_unit', 'weight_unit', 'distance_unit', 'money_unit', 'unit']:
+                    if unit_field in input_data:
+                        unit = input_data[unit_field]
+                        break
+            
+            # Calculate emission factor: EF = CO2e / Quantity
+            co2e_value = float(activity.get('co2e_kg', 0) or 0)
+            if quantity and quantity > 0:
+                emission_factor = f"{co2e_value / quantity:.6f}"
+            else:
+                emission_factor = 'N/A'
+            
+            source_name, _ = self._extract_emission_source(activity)
+            if not source_name:
+                source_name = 'N/A'
+            
+            detailed_data_raw.append([
+                str(i),
+                activity['type'][:12],
+                source_name,
+                activity['scope'],
+                f"{quantity:,.2f}" if quantity is not None else 'N/A',
+                unit,
+                emission_factor,
+                f"{co2e_value:,.2f}",
+                activity.get('calculation_method', 'N/A')[:9],
+                activity['region'],
+                activity['date'][:10] if activity['date'] != 'N/A' else 'N/A'
+            ])
+        
+        # Wrap cells in Paragraph objects for automatic text wrapping
+        detailed_data = []
+        for r_idx, row in enumerate(detailed_data_raw):
+            wrapped_row = []
+            for cell in row:
+                text = str(cell) if cell is not None else ''
+                wrapped_row.append(Paragraph(text, header_cell_style if r_idx == 0 else cell_style))
+            detailed_data.append(wrapped_row)
+        
+        detailed_table = Table(detailed_data, 
+                      colWidths=[0.25*inch, 0.75*inch, 1.3*inch, 0.55*inch, 0.6*inch, 0.48*inch, 0.8*inch, 0.75*inch, 0.65*inch, 0.45*inch, 0.6*inch],
+                      repeatRows=1)
+        detailed_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#7FA87F')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 6),
+            ('FONTSIZE', (0, 1), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('TOPPADDING', (0, 0), (-1, 0), 8),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 4),
+            ('TOPPADDING', (0, 1), (-1, -1), 4),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9F9F9')]),
+        ]))
+        
+        elements.append(KeepTogether([detail_heading, detailed_table]))
+        elements.append(PageBreak())
+        
         # Activity Data by Scope
         activity_heading = Paragraph("Activity Data by Scope", heading_style)
         activity_rows = self._build_activity_summary_rows()
@@ -792,72 +888,6 @@ class ReportGenerator:
         ]))
         
         elements.append(KeepTogether([type_heading, activity_table]))
-        elements.append(PageBreak())
-        
-        # Detailed Activities Table
-        detail_heading = Paragraph("Detailed Activity List", heading_style)
-        
-        detailed_data = [['#', 'Type', 'Scope', 'Quantity', 'Unit', 'CO2e (kg)', 'Calc Method', 'EF (kgCO2e/unit)', 'Region', 'Date']]
-        for i, activity in enumerate(self.activities, 1):
-            # Extract quantity and unit from input_data
-            input_data = activity.get('input_data', {})
-            quantity = None
-            unit = 'N/A'
-            
-            # Try different possible field names in input_data
-            if isinstance(input_data, dict):
-                # Check for common quantity fields
-                for qty_field in ['energy', 'volume', 'weight', 'distance', 'money', 'amount']:
-                    if qty_field in input_data:
-                        try:
-                            quantity = float(input_data[qty_field])
-                        except (TypeError, ValueError):
-                            pass
-                        if quantity is not None:
-                            break
-                
-                # Check for common unit fields
-                for unit_field in ['energy_unit', 'volume_unit', 'weight_unit', 'distance_unit', 'money_unit', 'unit']:
-                    if unit_field in input_data:
-                        unit = input_data[unit_field]
-                        break
-            
-            # Calculate emission factor: EF = CO2e / Quantity
-            co2e_value = float(activity.get('co2e_kg', 0) or 0)
-            if quantity and quantity > 0:
-                emission_factor = f"{co2e_value / quantity:.6f}"
-            else:
-                emission_factor = 'N/A'
-            
-            detailed_data.append([
-                str(i),
-                activity['type'][:15],
-                activity['scope'],
-                f"{quantity:,.2f}" if quantity is not None else 'N/A',
-                unit,
-                f"{co2e_value:,.2f}",
-                activity.get('calculation_method', 'N/A')[:12],
-                emission_factor,
-                activity['region'],
-                activity['date'][:10] if activity['date'] != 'N/A' else 'N/A'
-            ])
-        
-        detailed_table = Table(detailed_data, 
-                      colWidths=[0.3*inch, 1.1*inch, 0.7*inch, 0.7*inch, 0.5*inch, 0.8*inch, 0.8*inch, 1.5*inch, 0.5*inch, 0.8*inch],
-                      repeatRows=1)
-        detailed_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#7FA87F')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 7),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
-            ('TOPPADDING', (0, 0), (-1, 0), 10),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9F9F9')]),
-        ]))
-        
-        elements.append(KeepTogether([detail_heading, detailed_table]))
         
         # Build PDF
         doc.build(elements)
@@ -1004,7 +1034,7 @@ class ReportGenerator:
             all_columns = ["Activity Type", "CO2e (kg)", "Count"]
             full_rows = self._build_activity_type_breakdown_rows()
         elif table_type == 'detailed_list':
-            all_columns = ["#", "Type", "Scope", "Quantity", "Unit", "CO2e (kg)", "Calc Method", "EF (kgCO2e/unit)", "Region", "Date"]
+            all_columns = ["#", "Type", "Emission Source", "Scope", "Quantity", "Unit", "EF (kgCO2e/unit)", "CO2e (kg)", "Calc Method", "Region", "Date"]
             full_rows = self._build_detailed_activity_rows()
         elif table_type == 'custom':
             # For custom tables, build a combined table with the requested columns
@@ -1119,7 +1149,7 @@ class ReportGenerator:
     
     def _build_detailed_activity_rows(self) -> List[List[str]]:
         """Build detailed activity list table data"""
-        rows = [['#', 'Type', 'Scope', 'Quantity', 'Unit', 'CO2e (kg)', 'Calc Method', 'EF (kgCO2e/unit)', 'Region', 'Date']]
+        rows = [['#', 'Type', 'Emission Source', 'Scope', 'Quantity', 'Unit', 'EF (kgCO2e/unit)', 'CO2e (kg)', 'Calc Method', 'Region', 'Date']]
         
         for i, activity in enumerate(self.activities, 1):
             input_data = activity.get('input_data', {})
@@ -1147,15 +1177,20 @@ class ReportGenerator:
             else:
                 emission_factor = 'N/A'
             
+            source_name, _ = self._extract_emission_source(activity)
+            if not source_name:
+                source_name = 'N/A'
+            
             rows.append([
                 str(i),
-                activity['type'][:15],
+                activity['type'],
+                source_name,
                 activity['scope'],
                 f"{quantity:,.2f}" if quantity is not None else 'N/A',
                 unit,
-                f"{co2e_value:,.2f}",
-                activity.get('calculation_method', 'N/A')[:12],
                 emission_factor,
+                f"{co2e_value:,.2f}",
+                activity.get('calculation_method', 'N/A'),
                 activity['region'],
                 activity['date'][:10] if activity['date'] != 'N/A' else 'N/A'
             ])
@@ -1188,13 +1223,28 @@ class ReportGenerator:
             # Constituent gases per activity
             co2 = ch4 = n2o = other = None
             input_data = activity.get('input_data', {}) if isinstance(activity.get('input_data', {}), dict) else {}
-            autopilot = input_data.get('autopilot_response', {}) if isinstance(input_data.get('autopilot_response', {}), dict) else {}
+            
+            # Try to get from constituent_gases field in activity (database column)
             gas_breakdown = activity.get('constituent_gases')
-            if not gas_breakdown and autopilot:
-                gas_breakdown = autopilot.get('constituent_gases') or autopilot.get('constituentGases')
-                estimate = autopilot.get('estimate', {}) if isinstance(autopilot.get('estimate', {}), dict) else {}
-                if not gas_breakdown and estimate:
-                    gas_breakdown = estimate.get('constituent_gases') or estimate.get('constituentGases')
+            
+            # If not found, try calculation_response structure
+            if not gas_breakdown:
+                calc_response = input_data.get('calculation_response', {}) if isinstance(input_data.get('calculation_response', {}), dict) else {}
+                if calc_response:
+                    estimate = calc_response.get('estimate', {}) if isinstance(calc_response.get('estimate', {}), dict) else {}
+                    if estimate:
+                        gas_breakdown = estimate.get('constituent_gases') or estimate.get('constituentGases')
+            
+            # Fallback to autopilot_response if available
+            if not gas_breakdown:
+                autopilot = input_data.get('autopilot_response', {}) if isinstance(input_data.get('autopilot_response', {}), dict) else {}
+                if autopilot:
+                    gas_breakdown = autopilot.get('constituent_gases') or autopilot.get('constituentGases')
+                    estimate = autopilot.get('estimate', {}) if isinstance(autopilot.get('estimate', {}), dict) else {}
+                    if not gas_breakdown and estimate:
+                        gas_breakdown = estimate.get('constituent_gases') or estimate.get('constituentGases')
+            
+            # Extract values if gas_breakdown exists
             if isinstance(gas_breakdown, dict) and gas_breakdown:
                 try:
                     co2 = float(gas_breakdown.get('co2', 0) or 0)
