@@ -23,6 +23,12 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.pdfgen import canvas
 
+from docx import Document
+from docx.shared import Inches, Pt, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
+
 from sqlalchemy.orm import Session
 from app.models.project import Project
 from app.models.activity import EmissionActivity
@@ -1303,3 +1309,461 @@ class ReportGenerator:
             full_rows.append([amap.get(col, 'N/A') for col in all_columns])
 
         return all_columns, full_rows
+
+    # ========== DOCX Generation Methods ==========
+    
+    def generate_docx(self) -> io.BytesIO:
+        """Main entry point for DOCX report generation"""
+        # Fetch data
+        self._fetch_data()
+        
+        # Calculate summary statistics
+        self._calculate_summary()
+        
+        # Generate visualizations
+        viz_buffer = self._generate_visualizations()
+        
+        # Generate DOCX report
+        return self._generate_docx_document(viz_buffer)
+    
+    def generate_custom_docx(self, config: Dict[str, Any]) -> io.BytesIO:
+        """Generate custom DOCX report based on user configuration"""
+        # Fetch data
+        self._fetch_data()
+        
+        # Calculate summary statistics
+        self._calculate_summary()
+        
+        # Generate visualizations if requested
+        viz_buffer = None
+        if config.get('include_charts', True):
+            viz_buffer = self._generate_visualizations()
+        
+        # Generate custom DOCX report
+        return self._generate_custom_docx_document(config, viz_buffer)
+    
+    def _generate_docx_document(self, viz_buffer: io.BytesIO) -> io.BytesIO:
+        """Generate standard DOCX report with all sections"""
+        doc = Document()
+        
+        # Set document margins
+        sections = doc.sections
+        for section in sections:
+            section.top_margin = Inches(0.75)
+            section.bottom_margin = Inches(0.75)
+            section.left_margin = Inches(0.75)
+            section.right_margin = Inches(0.75)
+        
+        # Title
+        title = doc.add_heading('Carbon Footprint Report', 0)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # Project Information
+        doc.add_paragraph()
+        self._add_docx_project_info(doc)
+        
+        # Executive Summary
+        doc.add_heading('Executive Summary', 1)
+        summary_text = (
+            f"This report presents a comprehensive analysis of greenhouse gas emissions for "
+            f"{self.project_data['organization']}. During the reporting period, a total of "
+            f"{self.summary['total_activities']} emission activities were recorded, "
+            f"resulting in {self.summary['total_co2e_kg']:,.2f} kg CO2e of total emissions."
+        )
+        doc.add_paragraph(summary_text)
+        doc.add_paragraph()
+        
+        # Summary Totals Table
+        doc.add_heading('Summary Totals', 2)
+        self._add_docx_summary_table(doc)
+        
+        # Visualizations
+        if viz_buffer:
+            doc.add_page_break()
+            doc.add_heading('Emissions Analysis & Visualizations', 1)
+            doc.add_picture(viz_buffer, width=Inches(6.5))
+        
+        # Detailed Activity List
+        doc.add_page_break()
+        doc.add_heading('Detailed Activity List', 1)
+        self._add_docx_detailed_table(doc)
+        
+        # Activity Data by Scope
+        doc.add_page_break()
+        doc.add_heading('Activity Data by Scope', 1)
+        self._add_docx_activity_data_table(doc)
+        
+        # Emission Factors Used
+        doc.add_heading('Emission Factors Used', 1)
+        self._add_docx_emission_factors_table(doc)
+        
+        # GHG Emissions Summary
+        doc.add_page_break()
+        doc.add_heading('GHG Emissions by Scope and Gas', 1)
+        self._add_docx_gas_summary_table(doc)
+        
+        # Activity Type Breakdown
+        doc.add_page_break()
+        doc.add_heading('Activity Type Breakdown', 1)
+        self._add_docx_activity_type_table(doc)
+        
+        # Save to buffer
+        buffer = io.BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+        return buffer
+    
+    def _generate_custom_docx_document(self, config: Dict[str, Any], viz_buffer: Optional[io.BytesIO]) -> io.BytesIO:
+        """Generate custom DOCX report based on user configuration"""
+        doc = Document()
+        
+        # Set document margins
+        sections = doc.sections
+        for section in sections:
+            section.top_margin = Inches(0.75)
+            section.bottom_margin = Inches(0.75)
+            section.left_margin = Inches(0.75)
+            section.right_margin = Inches(0.75)
+        
+        # Title
+        title = doc.add_heading('Carbon Footprint Report', 0)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # Project Information
+        doc.add_paragraph()
+        self._add_docx_project_info(doc)
+        
+        # Executive Summary (if enabled)
+        if config.get('include_executive_summary', True):
+            doc.add_heading('Executive Summary', 1)
+            summary_text = (
+                f"This report presents a comprehensive analysis of greenhouse gas emissions for "
+                f"{self.project_data['organization']}. During the reporting period, a total of "
+                f"{self.summary['total_activities']} emission activities were recorded, "
+                f"resulting in {self.summary['total_co2e_kg']:,.2f} kg CO2e of total emissions."
+            )
+            doc.add_paragraph(summary_text)
+            doc.add_paragraph()
+            
+            # Summary Totals Table
+            doc.add_heading('Summary Totals', 2)
+            self._add_docx_summary_table(doc)
+        
+        # Visualizations (if enabled)
+        if config.get('include_charts', True) and viz_buffer:
+            doc.add_page_break()
+            doc.add_heading('Emissions Analysis & Visualizations', 1)
+            doc.add_picture(viz_buffer, width=Inches(6.5))
+        
+        # Custom Tables
+        for table_config in config.get('tables', []):
+            if table_config.get('page_break_before', False):
+                doc.add_page_break()
+            
+            self._add_custom_docx_table(doc, table_config)
+            
+            if table_config.get('page_break_after', False):
+                doc.add_page_break()
+        
+        # Save to buffer
+        buffer = io.BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+        return buffer
+    
+    def _add_docx_project_info(self, doc: Document):
+        """Add project information section to DOCX"""
+        info_items = [
+            ('Organization:', self.project_data['organization']),
+            ('Project:', self.project_data['name']),
+            ('Reporting Period:', f"{self.project_data['start_date']} to {self.project_data['end_date']}"),
+            ('Report Generated:', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        ]
+        
+        for label, value in info_items:
+            p = doc.add_paragraph()
+            p.add_run(label).bold = True
+            p.add_run(f' {value}')
+    
+    def _add_docx_summary_table(self, doc: Document):
+        """Add summary totals table to DOCX"""
+        table = doc.add_table(rows=1, cols=4)
+        table.style = 'Light Grid Accent 1'
+        
+        # Header row
+        header_cells = table.rows[0].cells
+        headers = ['Scope', 'CO2e (kg)', '%', 'Activities']
+        for i, header in enumerate(headers):
+            header_cells[i].text = header
+            self._set_cell_bold(header_cells[i])
+            self._set_cell_background_color(header_cells[i], '7FA87F')
+        
+        # Data rows
+        for scope in ['Scope 1', 'Scope 2', 'Scope 3']:
+            value = self.summary['scope_breakdown'].get(scope, 0)
+            percentage = self.summary['scope_percentages'].get(scope, 0)
+            count = len([a for a in self.activities if a['scope'] == scope])
+            
+            row_cells = table.add_row().cells
+            row_cells[0].text = scope
+            row_cells[1].text = f"{value:,.2f}"
+            row_cells[2].text = f"{percentage:.1f}%"
+            row_cells[3].text = str(count)
+        
+        # Total row
+        total_cells = table.add_row().cells
+        total_cells[0].text = 'Total'
+        total_cells[1].text = f"{self.summary['total_co2e_kg']:,.2f}"
+        total_cells[2].text = '100%'
+        total_cells[3].text = str(self.summary['total_activities'])
+        for cell in total_cells:
+            self._set_cell_bold(cell)
+            self._set_cell_background_color(cell, 'E8E8E8')
+        
+        doc.add_paragraph()
+    
+    def _add_docx_detailed_table(self, doc: Document):
+        """Add detailed activity list table to DOCX"""
+        headers = ['#', 'Type', 'Emission Source', 'Scope', 'Quantity', 'Unit', 'EF (kgCO2e/unit)', 'CO2e (kg)', 'Calc Method', 'Region', 'Date']
+        
+        table = doc.add_table(rows=1, cols=len(headers))
+        table.style = 'Light Grid Accent 1'
+        
+        # Header row
+        header_cells = table.rows[0].cells
+        for i, header in enumerate(headers):
+            header_cells[i].text = header
+            self._set_cell_bold(header_cells[i])
+            self._set_cell_background_color(header_cells[i], '7FA87F')
+            # Set smaller font for headers
+            for paragraph in header_cells[i].paragraphs:
+                for run in paragraph.runs:
+                    run.font.size = Pt(8)
+        
+        # Data rows
+        for i, activity in enumerate(self.activities, 1):
+            input_data = activity.get('input_data', {})
+            quantity = None
+            unit = 'N/A'
+            
+            if isinstance(input_data, dict):
+                for qty_field in ['energy', 'volume', 'weight', 'distance', 'money', 'amount']:
+                    if qty_field in input_data:
+                        try:
+                            quantity = float(input_data[qty_field])
+                        except (TypeError, ValueError):
+                            pass
+                        if quantity is not None:
+                            break
+                
+                for unit_field in ['energy_unit', 'volume_unit', 'weight_unit', 'distance_unit', 'money_unit', 'unit']:
+                    if unit_field in input_data:
+                        unit = input_data[unit_field]
+                        break
+            
+            co2e_value = float(activity.get('co2e_kg', 0) or 0)
+            if quantity and quantity > 0:
+                emission_factor = f"{co2e_value / quantity:.6f}"
+            else:
+                emission_factor = 'N/A'
+            
+            source_name, _ = self._extract_emission_source(activity)
+            
+            row_cells = table.add_row().cells
+            row_data = [
+                str(i),
+                activity['type'][:15],
+                source_name[:25] if source_name else 'N/A',
+                activity['scope'],
+                f"{quantity:,.2f}" if quantity is not None else 'N/A',
+                unit[:10] if unit else 'N/A',
+                emission_factor,
+                f"{co2e_value:,.2f}",
+                activity.get('calculation_method', 'N/A')[:12],
+                activity['region'][:8] if activity['region'] else 'N/A',
+                activity['date'][:10] if activity['date'] != 'N/A' else 'N/A'
+            ]
+            
+            for j, data in enumerate(row_data):
+                row_cells[j].text = str(data)
+                # Set smaller font for data
+                for paragraph in row_cells[j].paragraphs:
+                    for run in paragraph.runs:
+                        run.font.size = Pt(7)
+        
+        doc.add_paragraph()
+    
+    def _add_docx_activity_data_table(self, doc: Document):
+        """Add activity data by scope table to DOCX"""
+        rows = self._build_activity_summary_rows()
+        
+        table = doc.add_table(rows=1, cols=len(rows[0]))
+        table.style = 'Light Grid Accent 1'
+        
+        # Header row
+        header_cells = table.rows[0].cells
+        for i, header in enumerate(rows[0]):
+            header_cells[i].text = header
+            self._set_cell_bold(header_cells[i])
+            self._set_cell_background_color(header_cells[i], '7FA87F')
+        
+        # Data rows
+        for row_data in rows[1:]:
+            row_cells = table.add_row().cells
+            for i, cell_data in enumerate(row_data):
+                row_cells[i].text = str(cell_data)
+        
+        doc.add_paragraph()
+    
+    def _add_docx_emission_factors_table(self, doc: Document):
+        """Add emission factors table to DOCX"""
+        rows = self._build_emission_factor_rows()
+        
+        table = doc.add_table(rows=1, cols=len(rows[0]))
+        table.style = 'Light Grid Accent 1'
+        
+        # Header row
+        header_cells = table.rows[0].cells
+        for i, header in enumerate(rows[0]):
+            header_cells[i].text = header
+            self._set_cell_bold(header_cells[i])
+            self._set_cell_background_color(header_cells[i], '7FA87F')
+        
+        # Data rows
+        for row_data in rows[1:]:
+            row_cells = table.add_row().cells
+            for i, cell_data in enumerate(row_data):
+                row_cells[i].text = str(cell_data)
+        
+        doc.add_paragraph()
+    
+    def _add_docx_gas_summary_table(self, doc: Document):
+        """Add GHG gas summary table to DOCX"""
+        rows = self._build_gas_summary_rows()
+        
+        table = doc.add_table(rows=1, cols=len(rows[0]))
+        table.style = 'Light Grid Accent 1'
+        
+        # Header row
+        header_cells = table.rows[0].cells
+        for i, header in enumerate(rows[0]):
+            header_cells[i].text = header
+            self._set_cell_bold(header_cells[i])
+            self._set_cell_background_color(header_cells[i], '7FA87F')
+        
+        # Data rows
+        for row_data in rows[1:]:
+            row_cells = table.add_row().cells
+            for i, cell_data in enumerate(row_data):
+                row_cells[i].text = str(cell_data)
+        
+        doc.add_paragraph()
+    
+    def _add_docx_activity_type_table(self, doc: Document):
+        """Add activity type breakdown table to DOCX"""
+        rows = self._build_activity_type_breakdown_rows()
+        
+        table = doc.add_table(rows=1, cols=len(rows[0]))
+        table.style = 'Light Grid Accent 1'
+        
+        # Header row
+        header_cells = table.rows[0].cells
+        for i, header in enumerate(rows[0]):
+            header_cells[i].text = header
+            self._set_cell_bold(header_cells[i])
+            self._set_cell_background_color(header_cells[i], '7FA87F')
+        
+        # Data rows
+        for row_data in rows[1:]:
+            row_cells = table.add_row().cells
+            for i, cell_data in enumerate(row_data):
+                row_cells[i].text = str(cell_data)
+        
+        doc.add_paragraph()
+    
+    def _add_custom_docx_table(self, doc: Document, table_config: Dict[str, Any]):
+        """Add custom table to DOCX based on configuration"""
+        table_type = table_config.get('type')
+        title = table_config.get('title')
+        selected_columns = table_config.get('columns', [])
+        
+        # Get table data
+        if table_type == 'activity_data':
+            all_columns = ["Activity Type", "Emission Source", "Activity Data", "Unit", "Scope"]
+            full_rows = self._build_activity_summary_rows()
+        elif table_type == 'emission_factors':
+            all_columns = ["Scope", "Emission Source", "Unit", "kgCO2e per Unit", "Data Source"]
+            full_rows = self._build_emission_factor_rows()
+        elif table_type == 'gas_breakdown':
+            all_columns = ["Scope", "Emission Source", "CO2e (kg)", "CO2 (kg)", "CH4 (kg)", "N2O (kg)", "Other GHGs (kg)"]
+            full_rows = self._build_gas_summary_rows()
+        elif table_type == 'activity_type_breakdown':
+            all_columns = ["Activity Type", "CO2e (kg)", "Count"]
+            full_rows = self._build_activity_type_breakdown_rows()
+        elif table_type == 'detailed_list':
+            all_columns = ["#", "Type", "Emission Source", "Scope", "Quantity", "Unit", "EF (kgCO2e/unit)", "CO2e (kg)", "Calc Method", "Region", "Date"]
+            full_rows = self._build_detailed_activity_rows()
+        elif table_type == 'custom':
+            all_columns, full_rows = self._build_custom_combined_table(selected_columns)
+        else:
+            return
+        
+        # Filter columns
+        if not selected_columns or len(selected_columns) == 0:
+            selected_columns = all_columns
+        
+        header_row = full_rows[0]
+        col_indices = []
+        filtered_header = []
+        
+        for col in selected_columns:
+            if col in header_row:
+                idx = header_row.index(col)
+                col_indices.append(idx)
+                filtered_header.append(col)
+        
+        filtered_rows = [filtered_header]
+        for row in full_rows[1:]:
+            filtered_row = [row[i] for i in col_indices if i < len(row)]
+            filtered_rows.append(filtered_row)
+        
+        # Add heading
+        if not title:
+            title = self._get_default_table_title(table_type)
+        doc.add_heading(title, 2)
+        
+        # Create table
+        if len(filtered_rows) > 0 and len(filtered_rows[0]) > 0:
+            table = doc.add_table(rows=1, cols=len(filtered_rows[0]))
+            table.style = 'Light Grid Accent 1'
+            
+            # Header row
+            header_cells = table.rows[0].cells
+            for i, header in enumerate(filtered_rows[0]):
+                header_cells[i].text = str(header)
+                self._set_cell_bold(header_cells[i])
+                self._set_cell_background_color(header_cells[i], '7FA87F')
+            
+            # Data rows
+            for row_data in filtered_rows[1:]:
+                row_cells = table.add_row().cells
+                for i, cell_data in enumerate(row_data):
+                    row_cells[i].text = str(cell_data)
+        
+        doc.add_paragraph()
+    
+    def _set_cell_bold(self, cell):
+        """Set all text in a cell to bold"""
+        for paragraph in cell.paragraphs:
+            for run in paragraph.runs:
+                run.bold = True
+    
+    def _set_cell_background_color(self, cell, color_hex: str):
+        """Set cell background color"""
+        try:
+            shading_elm = OxmlElement('w:shd')
+            shading_elm.set(qn('w:fill'), color_hex)
+            cell._element.get_or_add_tcPr().append(shading_elm)
+        except Exception:
+            pass  # If color setting fails, continue without it
+

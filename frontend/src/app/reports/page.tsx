@@ -8,6 +8,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { FileText, Download, Loader2, FolderKanban, Calendar, FileDown, Sparkles } from "lucide-react"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { api } from "@/lib/api"
 import type { Project, User, Activity } from "@/types"
 import { formatDate } from "@/lib/utils"
@@ -72,7 +78,7 @@ export default function ReportsPage() {
     const handleDownloadPdf = async (projectId: string, projectName: string) => {
         setDownloadingPdf(projectId)
         try {
-            const blob = await api.downloadReport(projectId, { format_type: 'standard' })
+            const blob = await api.downloadReport(projectId, { format_type: 'standard', output_format: 'pdf' })
             const url = window.URL.createObjectURL(blob)
             const a = document.createElement('a')
             a.href = url
@@ -83,6 +89,25 @@ export default function ReportsPage() {
             document.body.removeChild(a)
         } catch (error: any) {
             alert(`Failed to download PDF: ${error.message}`)
+        } finally {
+            setDownloadingPdf(null)
+        }
+    }
+
+    const handleDownloadDocx = async (projectId: string, projectName: string) => {
+        setDownloadingPdf(projectId)
+        try {
+            const blob = await api.downloadReport(projectId, { format_type: 'standard', output_format: 'docx' })
+            const url = window.URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `${projectName.replace(/\s+/g, '_')}_carbon_report.docx`
+            document.body.appendChild(a)
+            a.click()
+            window.URL.revokeObjectURL(url)
+            document.body.removeChild(a)
+        } catch (error: any) {
+            alert(`Failed to download DOCX: ${error.message}`)
         } finally {
             setDownloadingPdf(null)
         }
@@ -100,19 +125,11 @@ export default function ReportsPage() {
         <DashboardShell userName={user?.full_name} organizationName={user?.organization?.name}>
             <div className="space-y-6 p-6">
                 {/* Page Header */}
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-2xl font-semibold text-foreground">Reports</h1>
-                        <p className="text-sm text-muted-foreground">
-                            Generate and download carbon footprint reports for your projects
-                        </p>
-                    </div>
-                    <Link href="/reports/custom">
-                        <Button className="gap-2">
-                            <Sparkles className="h-4 w-4" />
-                            Create Custom Report
-                        </Button>
-                    </Link>
+                <div>
+                    <h1 className="text-2xl font-semibold text-foreground">Reports</h1>
+                    <p className="text-sm text-muted-foreground">
+                        Generate and download carbon footprint reports for your projects
+                    </p>
                 </div>
 
                 {/* Info Card */}
@@ -188,25 +205,42 @@ export default function ReportsPage() {
                                             </span>
                                         </div>
                                         <div className="flex gap-2">
-                                            <Button
-                                                variant="default"
-                                                size="sm"
-                                                className="flex-1"
-                                                onClick={() => handleDownloadPdf(project.id, project.name)}
-                                                disabled={downloadingPdf === project.id}
-                                            >
-                                                {downloadingPdf === project.id ? (
-                                                    <>
-                                                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                                                        Generating...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Download className="mr-2 h-3 w-3" />
-                                                        Standard
-                                                    </>
-                                                )}
-                                            </Button>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button
+                                                        variant="default"
+                                                        size="sm"
+                                                        className="flex-1"
+                                                        disabled={downloadingPdf === project.id}
+                                                    >
+                                                        {downloadingPdf === project.id ? (
+                                                            <>
+                                                                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                                                                Generating...
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Download className="mr-2 h-3 w-3" />
+                                                                Standard
+                                                            </>
+                                                        )}
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem
+                                                        onClick={() => handleDownloadPdf(project.id, project.name)}
+                                                    >
+                                                        <FileText className="mr-2 h-4 w-4" />
+                                                        Download as PDF
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        onClick={() => handleDownloadDocx(project.id, project.name)}
+                                                    >
+                                                        <FileText className="mr-2 h-4 w-4" />
+                                                        Download as DOCX
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                             <Link href={`/reports/custom?project=${project.id}`} className="flex-1">
                                                 <Button
                                                     variant="outline"

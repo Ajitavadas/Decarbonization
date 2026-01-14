@@ -44,6 +44,7 @@ export default function CustomReportPage() {
   const [availableTables, setAvailableTables] = useState<Record<string, AvailableTable>>({});
   const [includeCharts, setIncludeCharts] = useState(true);
   const [includeExecutiveSummary, setIncludeExecutiveSummary] = useState(true);
+  const [outputFormat, setOutputFormat] = useState<'pdf' | 'docx'>('pdf');
   const [selectedTables, setSelectedTables] = useState<string[]>([]);
   const [tableConfigs, setTableConfigs] = useState<Record<string, TableConfig>>({});
   const [additionalTables, setAdditionalTables] = useState<AdditionalTableConfig[]>([]);
@@ -255,6 +256,7 @@ export default function CustomReportPage() {
       
       const reportConfig = {
         format_type: "custom",
+        output_format: outputFormat,
         include_charts: includeCharts,
         include_executive_summary: includeExecutiveSummary,
         tables: allTables,
@@ -264,7 +266,7 @@ export default function CustomReportPage() {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `custom_report_${selectedProjectId}.pdf`;
+      link.download = `custom_report_${selectedProjectId}.${outputFormat}`;
       link.click();
       window.URL.revokeObjectURL(url);
     } catch (error) {
@@ -673,6 +675,31 @@ export default function CustomReportPage() {
                 </div>
               </div>
 
+              {/* Output Format Selection */}
+              <div className="space-y-3 pt-4 border-t">
+                <h4 className="text-sm font-medium">Output Format</h4>
+                <div className="flex gap-3">
+                  <Button
+                    variant={outputFormat === 'pdf' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setOutputFormat('pdf')}
+                    className="flex-1"
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    PDF
+                  </Button>
+                  <Button
+                    variant={outputFormat === 'docx' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setOutputFormat('docx')}
+                    className="flex-1"
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    DOCX (Word)
+                  </Button>
+                </div>
+              </div>
+
               {combinedTables.length > 0 && (
                 <div className="space-y-3">
                   <h4 className="text-sm font-medium">Selected Tables:</h4>
@@ -717,7 +744,7 @@ export default function CustomReportPage() {
                 ) : (
                   <>
                     <Download className="h-4 w-4" />
-                    Generate Custom Report
+                    Generate as {outputFormat.toUpperCase()}
                   </>
                 )}
               </Button>

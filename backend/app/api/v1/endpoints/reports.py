@@ -26,6 +26,7 @@ class TableConfig(BaseModel):
 class ReportConfig(BaseModel):
     """Configuration for custom report generation"""
     format_type: str = Field("standard", description="Report format: 'standard' or 'custom'")
+    output_format: str = Field("pdf", description="Output format: 'pdf' or 'docx'")
     include_charts: bool = Field(True, description="Include visualization charts")
     include_executive_summary: bool = Field(True, description="Include executive summary section")
     tables: list[TableConfig] = Field(default_factory=list, description="List of tables to include in custom format")
@@ -42,29 +43,47 @@ async def generate_report(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Generate carbon footprint PDF report
+    Generate carbon footprint report (PDF or DOCX)
     
     - Standard format: Professional report with all sections (default)
     - Custom format: User-configured tables and columns
+    - Output formats: PDF (default) or DOCX
     """
     # Verify user has access to this project
     verify_project_access(db, project_id, current_user)
     
     try:
-        # Generate PDF report
+        # Get output format (default to PDF)
+        output_format = config.output_format if config else "pdf"
+        
+        # Generate report
         generator = ReportGenerator(db, project_id)
         
-        # Use custom config if provided, otherwise standard format
-        if config and config.format_type == "custom":
-            report_buffer = generator.generate_custom(config.dict())
+        # Determine report type and output format
+        if output_format.lower() == "docx":
+            # Generate DOCX
+            if config and config.format_type == "custom":
+                report_buffer = generator.generate_custom_docx(config.dict())
+            else:
+                report_buffer = generator.generate_docx()
+            
+            media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            file_extension = "docx"
         else:
-            report_buffer = generator.generate()
+            # Generate PDF (default)
+            if config and config.format_type == "custom":
+                report_buffer = generator.generate_custom(config.dict())
+            else:
+                report_buffer = generator.generate()
+            
+            media_type = "application/pdf"
+            file_extension = "pdf"
         
         return StreamingResponse(
             report_buffer,
-            media_type="application/pdf",
+            media_type=media_type,
             headers={
-                "Content-Disposition": f"attachment; filename=carbon_report_{project_id}.pdf"
+                "Content-Disposition": f"attachment; filename=carbon_report_{project_id}.{file_extension}"
             }
         )
     
