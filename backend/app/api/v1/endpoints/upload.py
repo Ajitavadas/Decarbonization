@@ -1,6 +1,7 @@
 """
-CSV Upload and Processing Endpoint
-Handles CSV file uploads, unit normalization, and emission calculations
+Multi-Format Upload and Processing Endpoint
+Handles CSV, XLSX, and PDF file uploads, unit normalization, and emission calculations
+Supports Mistral OCR for PDF document processing
 """
 
 import io
@@ -22,6 +23,7 @@ from app.models.batch_job import BatchJob
 from app.models.flagged_event import FlaggedEvent
 from app.services.unit_normalizer import UnitNormalizer
 from app.services.ai_classifier_service import AIScopeClassifierService
+from app.services.mistral_ocr_service import MistralOCRService
 from app.integration.climatiq.service import ClimatiqService
 from app.core.authorization import verify_project_access
 from app.db.session import get_db
@@ -30,6 +32,136 @@ import logging
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
+
+# Supported file types
+SUPPORTED_EXTENSIONS = {'.csv', '.xlsx', '.xls', '.pdf', '.png', '.jpg', '.jpeg'}
+
+# Required fields for emission calculation
+REQUIRED_FIELDS = ['description', 'amount', 'unit', 'region', 'activity_date', 'year', 'category']
+OPTIONAL_FIELDS = ['supplier_name']
+
+
+def detect_file_type(filename: str) -> str:
+    """Detect file type from filename extension"""
+    ext = filename.lower().split('.')[-1] if '.' in filename else ''
+    
+    if ext == 'csv':
+        return 'csv'
+    elif ext in ['xlsx', 'xls']:
+        return 'xlsx'
+    elif ext == 'pdf':
+        return 'pdf'
+    elif ext in ['png', 'jpg', 'jpeg', 'gif', 'webp']:
+        return 'image'
+    else:
+        return 'unknown'
+
+
+async def parse_xlsx_file(contents: bytes) -> pd.DataFrame:
+    """Parse XLSX file to DataFrame"""
+    try:
+        df = pd.read_excel(io.BytesIO(contents), engine='openpyxl')
+        df.columns = df.columns.str.lower().str.strip()
+        return df
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse XLSX file: {str(e)}")
+
+
+async def parse_csv_file(contents: bytes) -> pd.DataFrame:
+    """Parse CSV file to DataFrame"""
+    try:
+        df = pd.read_csv(io.StringIO(contents.decode('utf-8')))
+        df.columns = df.columns.str.lower().str.strip()
+        return df
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse CSV file: {str(e)}")
+
+
+async def parse_pdf_file(contents: bytes, filename: str) -> pd.DataFrame:
+    """Parse PDF file using Mistral OCR to DataFrame"""
+    try:
+        ocr_service = MistralOCRService()
+        activities = await ocr_service.extract_from_pdf(contents, filename)
+        
+        if not activities:
+            raise HTTPException(
+                status_code=400, 
+                detail="No activity data could be extracted from the PDF. "
+                       "Ensure the PDF contains tabular data with columns: description, amount, unit, region, activity_date, year, category."
+            )
+        
+        # Validate extracted activities
+        valid_activities, invalid_activities = ocr_service.validate_activities(activities)
+        
+        if not valid_activities and invalid_activities:
+            missing_fields = invalid_activities[0].get('missing_fields', [])
+            raise HTTPException(
+                status_code=400,
+                detail=f"Extracted data is missing required fields: {', '.join(missing_fields)}. "
+                       f"Required fields are: {', '.join(REQUIRED_FIELDS)}"
+            )
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(valid_activities)
+        df.columns = df.columns.str.lower().str.strip()
+        return df
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"PDF parsing failed: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Failed to process PDF: {str(e)}")
+
+
+async def parse_image_file(contents: bytes, filename: str) -> pd.DataFrame:
+    """Parse image file using Mistral Vision to DataFrame"""
+    try:
+        ocr_service = MistralOCRService()
+        activities = await ocr_service.extract_from_image(contents, filename)
+        
+        if not activities:
+            raise HTTPException(
+                status_code=400,
+                detail="No activity data could be extracted from the image. "
+                       "Ensure the image contains tabular data with required columns."
+            )
+        
+        valid_activities, invalid_activities = ocr_service.validate_activities(activities)
+        
+        if not valid_activities:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Extracted data is missing required fields. Required: {', '.join(REQUIRED_FIELDS)}"
+            )
+        
+        df = pd.DataFrame(valid_activities)
+        df.columns = df.columns.str.lower().str.strip()
+        return df
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Image parsing failed: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Failed to process image: {str(e)}")
+
+
+def validate_required_fields(df: pd.DataFrame) -> List[str]:
+    """Validate that all required fields are present in DataFrame"""
+    missing = []
+    for field in REQUIRED_FIELDS:
+        # Check for field or common aliases
+        aliases = {
+            'activity_date': ['activity_date', 'date'],
+            'description': ['description', 'desc'],
+        }
+        field_aliases = aliases.get(field, [field])
+        
+        if not any(alias in df.columns for alias in field_aliases):
+            missing.append(field)
+    
+    return missing
+
+
 
 
 def parse_number(value) -> float:
@@ -244,36 +376,84 @@ def extract_co2e_from_response(result: Dict[str, Any], endpoint_type: str = "aut
     return 0.0
 
 
-@router.post("/csv")
-async def upload_csv(
+@router.post("/upload")
+@router.post("/csv")  # Keep backward compatibility
+async def upload_file(
     file: UploadFile = File(...),
     project_id: str = Form(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Upload and process CSV file for emission calculations
+    Upload and process activity data file for emission calculations.
+    
+    Supports multiple file formats:
+    - CSV: Comma-separated values with headers
+    - XLSX/XLS: Excel spreadsheet files
+    - PDF: Document files (processed with Mistral OCR)
+    
+    Required columns:
+    - description: Activity description
+    - amount: Numeric value
+    - unit: Unit of measurement (kWh, gallons, miles, kg, USD, etc.)
+    - region: ISO country code (US, IN, GB, etc.)
+    - activity_date: Date (YYYY-MM-DD)
+    - year: Year for emission factors
+    - category: Activity category
+    
+    Optional columns:
+    - supplier_name: Vendor/supplier name
     """
     try:
         # Validate project AND verify ownership
         project = verify_project_access(db, project_id, current_user)
         
-        # Read CSV file
+        # Read file contents
         contents = await file.read()
-        df = pd.read_csv(io.StringIO(contents.decode('utf-8')))
+        filename = file.filename or "unknown"
         
-        # Normalize column names to lowercase for case-insensitive matching
-        # This handles CSV files with varying column name cases (e.g., "Description" vs "description")
-        df.columns = df.columns.str.lower().str.strip()
+        # Detect file type and parse accordingly
+        file_type = detect_file_type(filename)
+        logger.info(f"Processing {file_type} file: {filename} ({len(contents)} bytes)")
         
-        # MANDATORY REGION VALIDATION
-        # Region is required for accurate emission calculations - no fallbacks
-        if 'region' not in df.columns:
+        if file_type == 'csv':
+            df = await parse_csv_file(contents)
+        elif file_type == 'xlsx':
+            df = await parse_xlsx_file(contents)
+        elif file_type == 'pdf':
+            df = await parse_pdf_file(contents, filename)
+            print(f"[UPLOAD] PDF parsing returned DataFrame with {len(df)} rows")
+            print(f"[UPLOAD] DataFrame columns: {list(df.columns)}")
+            if len(df) > 0:
+                print(f"[UPLOAD] First row sample: {df.iloc[0].to_dict()}")
+        elif file_type == 'image':
+            df = await parse_image_file(contents, filename)
+        else:
             raise HTTPException(
-                status_code=400, 
-                detail="CSV must include a 'region' column. Region is required for accurate emission calculations. "
-                       "Use ISO 3166-1 Alpha-2 codes (e.g., US, IN, GB, DE) or extended codes (US-CA, US-NY)."
+                status_code=400,
+                detail=f"Unsupported file type: {filename}. "
+                       f"Supported formats: CSV, XLSX, XLS, PDF, PNG, JPG"
             )
+        
+        # Log DataFrame info for debugging
+        print(f"[UPLOAD] Parsed {len(df)} rows from {file_type} file")
+        print(f"[UPLOAD] Columns present: {list(df.columns)}")
+        
+        # Validate required fields
+        missing_fields = validate_required_fields(df)
+        print(f"[UPLOAD] Missing fields check result: {missing_fields}")
+        if missing_fields:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing required columns: {', '.join(missing_fields)}. "
+                       f"Required columns are: description, amount, unit, region, activity_date, year, category"
+            )
+        
+        # Handle column aliases (date -> activity_date, desc -> description)
+        if 'date' in df.columns and 'activity_date' not in df.columns:
+            df = df.rename(columns={'date': 'activity_date'})
+        if 'desc' in df.columns and 'description' not in df.columns:
+            df = df.rename(columns={'desc': 'description'})
         
         # Initialize services
         unit_normalizer = UnitNormalizer()
@@ -283,7 +463,7 @@ async def upload_csv(
         # Create batch job
         batch_job = BatchJob(
             project_id=project.id,
-            job_type="csv_upload",
+            job_type=f"{file_type}_upload",
             status="processing",
             total_records=len(df),
             processed_records=0,
@@ -319,41 +499,73 @@ async def upload_csv(
         
         for idx, row in df.iterrows():
             try:
-                # Extract and validate data - REGION IS MANDATORY
-                description = str(row.get("description", ""))
-                amount = parse_number(row.get("amount", 0))
-                unit = str(row.get("unit", ""))
+                print(f"[UPLOAD] Processing row {idx}: {dict(row)}")
                 
-                # Region extraction - MANDATORY, no fallbacks
+                # Extract and validate data - ALL REQUIRED FIELDS MANDATORY
+                description = str(row.get("description", ""))
+                if not description.strip():
+                    raise ValueError(f"Row {idx}: 'description' is required but empty.")
+                
+                amount = parse_number(row.get("amount", 0))
+                if amount <= 0:
+                    raise ValueError(f"Row {idx}: 'amount' must be a positive number.")
+                
+                unit = str(row.get("unit", ""))
+                if not unit.strip():
+                    raise ValueError(f"Row {idx}: 'unit' is required but empty.")
+                
+                # Region extraction - MANDATORY
                 region_raw = row.get("region")
                 if pd.isna(region_raw) or str(region_raw).strip() == "":
                     raise ValueError(
                         f"Row {idx}: 'region' is required but missing or empty. "
-                        f"Use ISO 3166-1 Alpha-2 codes (e.g., US, IN, GB). "
-                        f"Activity: '{description[:50]}...'"
+                        f"Use ISO 3166-1 Alpha-2 codes (e.g., US, IN, GB)."
                     )
-                region = str(region_raw).strip().upper()  # Normalize to uppercase
+                region = str(region_raw).strip().upper()
                 
-                # Validate region format (basic check)
+                # Validate region format
                 if len(region) < 2 or len(region) > 6:
                     raise ValueError(
                         f"Row {idx}: Invalid region '{region}'. "
                         f"Use ISO 3166-1 Alpha-2 (US, IN) or extended (US-CA) codes."
                     )
                 
-                year = int(row.get("year")) if pd.notna(row.get("year")) else datetime.now().year
-                activity_date_str = str(row.get("activity_date", "")) if pd.notna(row.get("activity_date")) else None
+                # Year - MANDATORY
+                year_raw = row.get("year")
+                if pd.isna(year_raw):
+                    raise ValueError(f"Row {idx}: 'year' is required but missing.")
+                year = int(year_raw)
+                
+                # Activity date - MANDATORY
+                activity_date_str = row.get("activity_date")
+                if pd.isna(activity_date_str) or str(activity_date_str).strip() == "":
+                    raise ValueError(f"Row {idx}: 'activity_date' is required but missing.")
+                
+                # Parse activity date (support multiple formats)
+                try:
+                    if isinstance(activity_date_str, datetime):
+                        activity_date = activity_date_str.date()
+                    else:
+                        date_str = str(activity_date_str).strip()
+                        # Try common formats
+                        for fmt in ["%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%Y/%m/%d"]:
+                            try:
+                                activity_date = datetime.strptime(date_str, fmt).date()
+                                break
+                            except ValueError:
+                                continue
+                        else:
+                            raise ValueError(f"Could not parse date: {date_str}")
+                except Exception as e:
+                    raise ValueError(f"Row {idx}: Invalid activity_date '{activity_date_str}'. Use YYYY-MM-DD format.")
+                
+                # Category - MANDATORY  
+                category_raw = row.get("category")
+                if pd.isna(category_raw) or str(category_raw).strip() == "":
+                    raise ValueError(f"Row {idx}: 'category' is required but missing.")
+                category = str(category_raw).strip()
                 
                 print(f"DEBUG - Row {idx}: extracted unit='{unit}' (after normalization)")
-                
-                # Parse activity date
-                if activity_date_str:
-                    try:
-                        activity_date = datetime.strptime(activity_date_str, "%Y-%m-%d").date()
-                    except ValueError:
-                        activity_date = datetime.now().date()
-                else:
-                    activity_date = datetime.now().date()
                 
                 # Determine unit type (comprehensive detection)
                 unit_lower = unit.lower()
@@ -366,7 +578,7 @@ async def upload_csv(
                 elif unit_lower in ['eur', 'usd', 'gbp', 'chf', 'cad', 'aud', 'jpy', 'cny', 'inr', 'aed', 'sar', 'sek', 'nok', 'dkk']:
                     unit_type = "money"
                 elif unit_lower in ['km', 'kilometer', 'kilometre', 'mi', 'mile', 'miles', 'm', 'meter', 'metre']:
-                    unit_type = "distance"  # For travel
+                    unit_type = "distance"
                 else:
                     unit_type = "money"  # Default fallback
                 
@@ -374,16 +586,12 @@ async def upload_csv(
                 climatiq_classification = None
                 scope = "Scope 3"  # Default
                 try:
-                    # Get category from CSV if available
-                    category = str(row.get("category", "")) if pd.notna(row.get("category")) else ""
-                    
                     # Use the new comprehensive classification method
-                    # Region is now guaranteed to exist (validated above)
                     climatiq_classification = await ai_classifier.classify_for_climatiq(
                         description=description,
                         unit=unit,
                         category=category,
-                        region=region  # No fallback - region is mandatory
+                        region=region
                     )
                     print(f"  AI Classification result: {climatiq_classification}")
                     

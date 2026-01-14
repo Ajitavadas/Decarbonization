@@ -133,12 +133,45 @@ export default function UploadPage() {
                 {/* Upload Section */}
                 <Card className="border-border bg-card">
                     <CardHeader>
-                        <CardTitle className="text-base">Upload CSV</CardTitle>
+                        <CardTitle className="text-base">Upload Activity Data</CardTitle>
                         <CardDescription>
-                            Select a project and upload a CSV file with columns: description, amount, unit, date, region
+                            Select a project and upload your activity data file
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                        {/* File Format Information Panel */}
+                        <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+                            <h4 className="font-medium text-sm mb-3 flex items-center gap-2">
+                                <FileUp className="h-4 w-4 text-primary" />
+                                Supported File Formats
+                            </h4>
+                            <div className="flex gap-2 text-xs mb-4">
+                                <div className="bg-primary/10 text-primary rounded px-3 py-1.5 font-medium">CSV</div>
+                                <div className="bg-primary/10 text-primary rounded px-3 py-1.5 font-medium">XLSX</div>
+                                <div className="bg-primary/10 text-primary rounded px-3 py-1.5 font-medium">PDF</div>
+                            </div>
+                            <div className="text-xs space-y-2">
+                                <p className="font-medium text-foreground">Required Fields:</p>
+                                <div className="bg-background/50 rounded p-2">
+                                    <div className="grid grid-cols-4 gap-2 text-muted-foreground">
+                                        <span>• description</span>
+                                        <span>• amount</span>
+                                        <span>• unit</span>
+                                        <span>• region</span>
+                                        <span>• activity_date</span>
+                                        <span>• year</span>
+                                        <span>• category</span>
+                                    </div>
+                                </div>
+                                <p className="text-muted-foreground/80">
+                                    <span className="font-medium">Optional:</span> supplier_name
+                                </p>
+                                <p className="text-muted-foreground/70 text-[10px] mt-2">
+                                    PDFs will be processed using AI to extract data from tables. Regions like &quot;Karnataka&quot; will be normalized to ISO codes (IN, US, GB, etc).
+                                </p>
+                            </div>
+                        </div>
+
                         {projects.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-8 text-center">
                                 <FolderKanban className="h-10 w-10 text-muted-foreground mb-3" />
@@ -176,13 +209,13 @@ export default function UploadPage() {
                                 <div className="flex items-center gap-4">
                                     <input
                                         type="file"
-                                        id="csv-upload"
-                                        accept=".csv"
+                                        id="file-upload"
+                                        accept=".csv,.xlsx,.xls,.pdf"
                                         onChange={handleFileUpload}
                                         className="hidden"
                                         disabled={uploading || !selectedProject}
                                     />
-                                    <label htmlFor="csv-upload">
+                                    <label htmlFor="file-upload">
                                         <Button asChild disabled={uploading || !selectedProject}>
                                             <span>
                                                 {uploading ? (
@@ -193,12 +226,15 @@ export default function UploadPage() {
                                                 ) : (
                                                     <>
                                                         <Upload className="mr-2 h-4 w-4" />
-                                                        Select CSV File
+                                                        Select File
                                                     </>
                                                 )}
                                             </span>
                                         </Button>
                                     </label>
+                                    <span className="text-xs text-muted-foreground">
+                                        CSV, XLSX, or PDF
+                                    </span>
                                 </div>
                             </>
                         )}
