@@ -67,15 +67,15 @@ async def health_check():
 @app.on_event("startup")
 async def startup_event():
     """Startup event handler"""
-    print(f"🚀 {settings.APP_NAME} starting up...")
-    print(f"📊 Environment: {settings.ENVIRONMENT}")
-    print(f"🔧 Debug mode: {settings.DEBUG}")
+    print(f">> {settings.APP_NAME} starting up...")
+    print(f">> Environment: {settings.ENVIRONMENT}")
+    print(f">> Debug mode: {settings.DEBUG}")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Shutdown event handler"""
-    print(f"👋 {settings.APP_NAME} shutting down...")
+    print(f">> {settings.APP_NAME} shutting down...")
     # Close any open connections
     from app.services.cache_manager import cache_manager
     await cache_manager.close()

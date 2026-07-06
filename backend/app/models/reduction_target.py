@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from sqlalchemy import Column, String, DateTime, Numeric, ForeignKey, Index, Integer, Boolean
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from app.db.types import UUID, JSONB
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base
@@ -25,11 +25,11 @@ class ReductionTarget(Base):
     
     __tablename__ = "reduction_targets"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID, primary_key=True, default=uuid.uuid4)
     
     # Organization scope
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True)  # Optional project-specific
+    organization_id = Column(UUID, ForeignKey("organizations.id"), nullable=False)
+    project_id = Column(UUID, ForeignKey("projects.id"), nullable=True)  # Optional project-specific
     
     # Target definition
     name = Column(String(255), nullable=False)

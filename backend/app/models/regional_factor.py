@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from sqlalchemy import Column, String, DateTime, Numeric, Boolean, Text
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from app.db.types import UUID, JSONB
 
 from app.db.base import Base
 
@@ -25,7 +25,7 @@ class RegionalFactor(Base):
     
     __tablename__ = "regional_factors"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID, primary_key=True, default=uuid.uuid4)
     
     # Region identification
     country_code = Column(String(2), nullable=False, index=True)  # ISO 3166-1 Alpha-2

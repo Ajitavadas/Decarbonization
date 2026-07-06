@@ -28,12 +28,12 @@ class Settings(BaseSettings):
     AI_MIN_CONFIDENCE_THRESHOLD: float = 0.7  # Minimum confidence for auto-approval
     
     # Database
-    DATABASE_URL: str = Field(..., description="PostgreSQL connection string")
-    
-    # Redis
-    REDIS_URL: str = Field(..., description="Redis connection string")
-    CELERY_BROKER_URL: str
-    CELERY_RESULT_BACKEND: str
+    DATABASE_URL: str = Field(..., description="Database connection string (PostgreSQL or SQLite)")
+
+    # Redis (optional - cache disabled if not available)
+    REDIS_URL: str = Field(default="", description="Redis connection string")
+    CELERY_BROKER_URL: str = ""
+    CELERY_RESULT_BACKEND: str = ""
     
     # Security
     SECRET_KEY: str = Field(..., min_length=32, description="JWT secret key")

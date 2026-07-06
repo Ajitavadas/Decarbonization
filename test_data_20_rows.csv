@@ -1,0 +1,21 @@
+description,amount,unit,category,supplier_name,region,activity_date,year
+Office electricity consumption - January,15200,kWh,Electricity,Metro Power,US,2025-01-15,2025
+Natural gas heating - Head office,420,therms,Heating Fuel,Regional Gas,US,2025-01-20,2025
+Company vehicle diesel fuel,850,gallons,Transportation,Shell,US,2025-01-25,2025
+Business flight New York to San Francisco,2680,miles,Business Travel,Delta Airlines,US,2025-02-05,2025
+Warehouse electricity - Production area,28500,kWh,Manufacturing,Metro Power,US,2025-02-10,2025
+Delivery truck gasoline,1250,gallons,Transportation,BP,US,2025-02-15,2025
+Data center cooling electricity,18900,kWh,IT Services,Metro Power,US,2025-02-20,2025
+Employee commute - Q1 survey,18500,miles,Employee Commute,Various,US,2025-03-01,2025
+Office natural gas - February heating,385,therms,Heating Fuel,Regional Gas,US,2025-03-05,2025
+Rental vehicles for field team,1850,miles,Business Travel,Enterprise,US,2025-03-10,2025
+Manufacturing facility electricity,45000,kWh,Manufacturing,Metro Power,US,2025-03-15,2025
+Backup generator diesel,320,gallons,Stationary Combustion,PetroMax,US,2025-03-20,2025
+International flight London to Tokyo,6845,miles,Business Travel,British Airways,UK,2025-04-01,2025
+Office electricity - Spring quarter,14800,kWh,Electricity,Metro Power,US,2025-04-05,2025
+Company fleet gasoline - Sales team,2100,gallons,Transportation,Chevron,US,2025-04-10,2025
+Server room electricity,22500,kWh,IT Services,Metro Power,US,2025-04-15,2025
+Natural gas - Kitchen and heating,290,therms,Heating Fuel,Regional Gas,US,2025-04-20,2025
+Conference travel - Multiple destinations,4200,miles,Business Travel,United Airlines,US,2025-05-01,2025
+Warehouse operations electricity,31000,kWh,Manufacturing,Metro Power,US,2025-05-10,2025
+Forklift propane fuel,850,gallons,Stationary Combustion,AmeriGas,US,2025-05-15,2025

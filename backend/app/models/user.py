@@ -5,10 +5,10 @@ User model for authentication and authorization
 import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base
+from app.db.types import UUID
 
 
 class User(Base):
@@ -16,7 +16,7 @@ class User(Base):
     
     __tablename__ = "users"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID, primary_key=True, default=uuid.uuid4)
     email = Column(String(255), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=True)
@@ -24,7 +24,7 @@ class User(Base):
     is_superuser = Column(Boolean, default=False)
     
     # Relationships
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True)
+    organization_id = Column(UUID, ForeignKey("organizations.id"), nullable=True)
     organization = relationship("Organization", back_populates="users")
     
     # Timestamps
