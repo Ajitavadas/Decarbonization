@@ -465,6 +465,7 @@ async def upload_file(
             project_id=project.id,
             job_type=f"{file_type}_upload",
             status="processing",
+            file_name=filename,
             total_records=len(df),
             processed_records=0,
             successful_records=0,
@@ -486,9 +487,9 @@ async def upload_file(
                     original_amount = parse_number(df.at[idx, 'amount']) if pd.notna(df.at[idx, 'amount']) else 0
                     converted_amount = original_amount * 29.3
                     df.at[idx, 'amount'] = converted_amount
-                    print(f"  Row {idx}: {original_amount} {original_unit} → {converted_amount} kWh")
+                    print(f"  Row {idx}: {original_amount} {original_unit} -> {converted_amount} kWh")
                 elif original_unit != normalized_unit:
-                    print(f"  Row {idx}: {original_unit} → {normalized_unit}")
+                    print(f"  Row {idx}: {original_unit} -> {normalized_unit}")
                 
                 df.at[idx, 'unit'] = normalized_unit
         
@@ -629,7 +630,7 @@ async def upload_file(
                             else:
                                 calc_amount = amount * freight_weight  # km * tonnes = tkm
                             calc_unit = "tkm"
-                            print(f"  🚛 Freight conversion: {amount} {unit} × {freight_weight} tonnes = {calc_amount} tkm")
+                            print(f"  [FREIGHT] Conversion: {amount} {unit} x {freight_weight} tonnes = {calc_amount} tkm")
                         else:
                             # Default weight estimate if not provided
                             default_weight = 10  # tonnes per truck load
@@ -638,7 +639,7 @@ async def upload_file(
                             else:
                                 calc_amount = amount * default_weight
                             calc_unit = "tkm"
-                            print(f"  🚛 Freight conversion (default weight): {amount} {unit} × {default_weight} tonnes = {calc_amount} tkm")
+                            print(f"  [FREIGHT] Conversion (default weight): {amount} {unit} x {default_weight} tonnes = {calc_amount} tkm")
                     
                     calculation_result = await climatiq_service.calculate_with_classification(
                         classification=climatiq_classification,
@@ -796,7 +797,7 @@ async def upload_file(
                         confidence_score=0.0
                     )
                     db.add(flagged_event)
-                    print(f"  ⚠️ Created anomaly flag for zero-emission activity: {description[:50]}")
+                    print(f"  [WARNING] Created anomaly flag for zero-emission activity: {description[:50]}")
                 
                 successful_count += 1
                 

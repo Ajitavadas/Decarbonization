@@ -13,7 +13,22 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 export function ThemeToggle() {
-    const { setTheme } = useTheme()
+    const [mounted, setMounted] = React.useState(false)
+    const { setTheme, theme } = useTheme()
+
+    // useEffect only runs on the client, so now we can safely show the UI
+    React.useEffect(() => {
+        setMounted(true)
+    }, [])
+
+    if (!mounted) {
+        return (
+            <Button variant="outline" size="icon" disabled>
+                <Sun className="h-[1.2rem] w-[1.2rem]" />
+                <span className="sr-only">Toggle theme</span>
+            </Button>
+        )
+    }
 
     return (
         <DropdownMenu>
