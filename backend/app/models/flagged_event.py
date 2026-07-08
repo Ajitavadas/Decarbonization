@@ -6,7 +6,7 @@ Stores detected gaps, anomalies, and archetype mismatches per organization
 import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Index, Integer, Numeric
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from app.db.types import UUID, JSONB
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base
@@ -24,14 +24,14 @@ class FlaggedEvent(Base):
     
     __tablename__ = "flagged_events"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID, primary_key=True, default=uuid.uuid4)
     
     # Organization scope (always required for isolation)
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    organization_id = Column(UUID, ForeignKey("organizations.id"), nullable=False)
     
     # Optional linkage to specific project or activity
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True)
-    activity_id = Column(UUID(as_uuid=True), ForeignKey("emission_activities.id"), nullable=True)
+    project_id = Column(UUID, ForeignKey("projects.id"), nullable=True)
+    activity_id = Column(UUID, ForeignKey("emission_activities.id"), nullable=True)
     
     # Classification
     flag_type = Column(String(50), nullable=False, index=True)  # "gap", "anomaly", "archetype_mismatch"
@@ -48,7 +48,7 @@ class FlaggedEvent(Base):
     
     # Status tracking
     status = Column(String(30), default="open", nullable=False, index=True)  # "open", "acknowledged", "resolved", "false_positive"
-    resolved_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    resolved_by = Column(UUID, ForeignKey("users.id"), nullable=True)
     resolution_notes = Column(Text, nullable=True)
     resolved_at = Column(DateTime, nullable=True)
     
@@ -72,7 +72,7 @@ class FlaggedEvent(Base):
     next_action = Column(Text, nullable=True)  # What to do in 3-6 weeks
     
     # Audit metadata
-    audit_run_id = Column(UUID(as_uuid=True), nullable=True)  # Groups findings from same audit run
+    audit_run_id = Column(UUID, nullable=True)  # Groups findings from same audit run
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

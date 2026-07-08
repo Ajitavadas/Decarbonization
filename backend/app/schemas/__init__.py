@@ -206,6 +206,7 @@ class BatchJobResponse(BaseModel):
     id: UUID4
     job_type: str
     status: str
+    file_name: Optional[str] = None
     total_records: int
     processed_records: int
     successful_records: int
@@ -215,7 +216,7 @@ class BatchJobResponse(BaseModel):
     created_at: datetime
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
-    
+
     class Config:
         from_attributes = True
 

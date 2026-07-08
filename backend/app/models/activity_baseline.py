@@ -11,7 +11,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import Column, String, DateTime, Numeric, ForeignKey, Integer, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from app.db.types import UUID
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base
@@ -29,8 +29,8 @@ class ActivityBaseline(Base):
     
     __tablename__ = "activity_baselines"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True)
+    id = Column(UUID, primary_key=True, default=uuid.uuid4)
+    organization_id = Column(UUID, ForeignKey("organizations.id"), nullable=False, index=True)
     
     # Activity classification
     activity_type = Column(String(50), nullable=False, index=True)  # electricity, heating, fuel

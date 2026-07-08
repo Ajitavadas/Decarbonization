@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from sqlalchemy import Column, String, DateTime, Numeric, ForeignKey, Index
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from app.db.types import UUID, JSONB
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base
@@ -23,7 +23,7 @@ class EmissionActivity(Base):
     
     __tablename__ = "emission_activities"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID, primary_key=True, default=uuid.uuid4)
     
     # Activity classification
     activity_type = Column(String(50), nullable=False, index=True)  # travel, freight, energy, procurement
@@ -59,10 +59,10 @@ class EmissionActivity(Base):
     tags = Column(JSONB, default=[])  # ["business-travel", "client-meeting"]
     
     # Relationships
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
+    project_id = Column(UUID, ForeignKey("projects.id"), nullable=False)
     project = relationship("Project", back_populates="activities")
     
-    batch_job_id = Column(UUID(as_uuid=True), ForeignKey("batch_jobs.id"), nullable=True)
+    batch_job_id = Column(UUID, ForeignKey("batch_jobs.id"), nullable=True)
     batch_job = relationship("BatchJob", back_populates="activities")
     
     # Timestamps

@@ -98,37 +98,40 @@ async def calculate_batch_estimates(
     
     For large batches:
     - Creates a batch job for tracking
-    - Processes asynchronously with Celery
-    - Returns job ID for status polling
+    - Processes synchronously (inline)
+    - Returns job ID and completion status
     """
     from app.models.batch_job import BatchJob
     from app.tasks.batch_processing import process_batch_estimates
-    
+
     # Create batch job
     job = BatchJob(
         job_type="batch_estimate",
-        status="queued",
+        status="processing",
         total_records=len(request.estimates),
         project_id=request.project_id
     )
     db.add(job)
     db.commit()
     db.refresh(job)
-    
-    # Queue async task
-    task = process_batch_estimates.delay(
+
+    # Process synchronously
+    result = process_batch_estimates(
         job_id=str(job.id),
         project_id=str(request.project_id),
         estimates=request.estimates
     )
-    
-    job.celery_task_id = task.id
-    db.commit()
-    
+
+    # Refresh to get updated job status
+    db.refresh(job)
+
     return {
         "success": True,
-        "message": "Batch job queued for processing",
+        "message": "Batch job completed",
         "job_id": job.id,
         "status": job.status,
-        "total_records": job.total_records
+        "total_records": job.total_records,
+        "successful_records": job.successful_records,
+        "failed_records": job.failed_records,
+        "result": result
     }

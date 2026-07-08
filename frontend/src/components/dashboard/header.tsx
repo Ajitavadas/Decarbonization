@@ -12,6 +12,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { api } from "@/lib/api"
 
 interface HeaderProps {
@@ -43,6 +44,9 @@ export function Header({ userName, organizationName }: HeaderProps) {
                         {organizationName}
                     </Badge>
                 )}
+
+                {/* Theme Toggle */}
+                <ThemeToggle />
 
                 {/* Notifications */}
                 <DropdownMenu>

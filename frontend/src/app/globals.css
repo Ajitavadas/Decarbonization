@@ -3,44 +3,44 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Decarbonization Platform Theme - Dark mode with green sustainability accents */
+/* Decarbonization Platform Theme - Green sustainability accents */
 :root {
-  --background: #14141f;
-  --foreground: #f2f2f2;
-  --card: #1a1a2e;
-  --card-foreground: #f2f2f2;
-  --popover: #1a1a2e;
-  --popover-foreground: #f2f2f2;
-  --primary: #22c55e;
-  --primary-foreground: #14141f;
-  --secondary: #252538;
-  --secondary-foreground: #f2f2f2;
-  --muted: #252538;
-  --muted-foreground: #8c8c8c;
-  --accent: #22c55e;
-  --accent-foreground: #14141f;
+  --background: #ffffff;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #16a34a;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #16a34a;
+  --accent-foreground: #ffffff;
   --destructive: #dc2626;
-  --destructive-foreground: #f2f2f2;
-  --border: #333347;
-  --input: #252538;
-  --ring: #22c55e;
-  --chart-1: #22c55e;
-  --chart-2: #3b82f6;
-  --chart-3: #eab308;
-  --chart-4: #a855f7;
-  --chart-5: #f97316;
+  --destructive-foreground: #ffffff;
+  --border: #e2e8f0;
+  --input: #f1f5f9;
+  --ring: #16a34a;
+  --chart-1: #16a34a;
+  --chart-2: #2563eb;
+  --chart-3: #ca8a04;
+  --chart-4: #9333ea;
+  --chart-5: #ea580c;
   --radius: 0.625rem;
-  --sidebar: #101018;
-  --sidebar-foreground: #f2f2f2;
-  --sidebar-primary: #22c55e;
-  --sidebar-primary-foreground: #14141f;
-  --sidebar-accent: #1e1e2d;
-  --sidebar-accent-foreground: #f2f2f2;
-  --sidebar-border: #2a2a3d;
-  --sidebar-ring: #22c55e;
-  --success: #22c55e;
-  --warning: #eab308;
-  --info: #3b82f6;
+  --sidebar: #f8fafc;
+  --sidebar-foreground: #0f172a;
+  --sidebar-primary: #16a34a;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f1f5f9;
+  --sidebar-accent-foreground: #0f172a;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #16a34a;
+  --success: #16a34a;
+  --warning: #ca8a04;
+  --info: #2563eb;
 }
 
 .dark {
@@ -131,23 +131,23 @@
   }
 }
 
-/* Custom scrollbar for dark theme */
+/* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #1a1a2e;
+  background: var(--muted);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #333347;
+  background: var(--border);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #444460;
+  background: var(--muted-foreground);
 }
 
 /* Animated gradient for AI elements */

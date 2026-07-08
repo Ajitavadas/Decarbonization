@@ -1,20 +1,21 @@
 """
-Batch processing tasks
-Async processing of large emission calculation batches
+Batch processing functions (converted from Celery tasks)
+Synchronous processing of emission calculation batches
 """
 
 from typing import List, Dict, Any
 from datetime import datetime
 from sqlalchemy.orm import Session
+import logging
 
-from app.core.celery_app import celery_app
 from app.db.session import SessionLocal
 from app.models.batch_job import BatchJob
 from app.models.activity import EmissionActivity
 
+logger = logging.getLogger(__name__)
 
-@celery_app.task(bind=True, name="app.tasks.batch_processing.process_batch_estimates")
-def process_batch_estimates(self, job_id: str, project_id: str, estimates: List[Dict[str, Any]]):
+
+def process_batch_estimates(job_id: str, project_id: str, estimates: List[Dict[str, Any]]):
     """
     Process batch emission estimates
     
@@ -85,15 +86,11 @@ def process_batch_estimates(self, job_id: str, project_id: str, estimates: List[
             finally:
                 job.processed_records += 1
                 db.commit()
-                
-                # Update task progress
-                self.update_state(
-                    state="PROGRESS",
-                    meta={
-                        "current": job.processed_records,
-                        "total": job.total_records,
-                        "percentage": job.progress_percentage
-                    }
+
+                # Log progress
+                logger.info(
+                    f"Batch job {job_id}: {job.processed_records}/{job.total_records} "
+                    f"({job.progress_percentage:.1f}%)"
                 )
         
         # Mark job as completed
@@ -122,7 +119,6 @@ def process_batch_estimates(self, job_id: str, project_id: str, estimates: List[
         db.close()
 
 
-@celery_app.task(name="app.tasks.batch_processing.process_csv_upload")
 def process_csv_upload(job_id: str, project_id: str, file_path: str):
     """
     Process CSV file upload for batch emissions

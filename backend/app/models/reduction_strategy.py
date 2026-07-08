@@ -5,7 +5,7 @@ Reduction Strategy model - AI-generated reduction strategies with caching
 import uuid
 from datetime import datetime, timedelta
 from sqlalchemy import Column, String, DateTime, Numeric, ForeignKey, Index, Integer, Text
-from sqlalchemy.dialects.postgresql import UUID
+from app.db.types import UUID
 
 from app.db.base import Base
 
@@ -23,11 +23,11 @@ class ReductionStrategy(Base):
     
     __tablename__ = "reduction_strategies"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID, primary_key=True, default=uuid.uuid4)
     
     # Scope
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
-    target_id = Column(UUID(as_uuid=True), ForeignKey("reduction_targets.id"), nullable=True)
+    organization_id = Column(UUID, ForeignKey("organizations.id"), nullable=False)
+    target_id = Column(UUID, ForeignKey("reduction_targets.id"), nullable=True)
     
     # Strategy details
     title = Column(String(255), nullable=False)

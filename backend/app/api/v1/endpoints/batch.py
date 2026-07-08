@@ -75,14 +75,10 @@ async def cancel_batch_job(
             detail=f"Cannot cancel job with status: {job.status}"
         )
     
-    # Revoke Celery task
-    from app.core.celery_app import celery_app
-    if job.celery_task_id:
-        celery_app.control.revoke(job.celery_task_id, terminate=True)
-    
+    # Mark job as cancelled (no Celery task to revoke)
     job.status = "cancelled"
     db.commit()
-    
+
     return {"success": True, "message": "Job cancelled"}
 
 

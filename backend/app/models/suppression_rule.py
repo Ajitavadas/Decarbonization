@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 from sqlalchemy import Column, String, DateTime, Numeric, ForeignKey, Boolean, Text
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from app.db.types import UUID, JSONB
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base
@@ -24,14 +24,14 @@ class SuppressionRule(Base):
     
     __tablename__ = "suppression_rules"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True)
+    id = Column(UUID, primary_key=True, default=uuid.uuid4)
+    organization_id = Column(UUID, ForeignKey("organizations.id"), nullable=False, index=True)
     
     # Rule matching
     rule_id = Column(String(100), nullable=False)  # Matches finding.rule_id
     condition = Column(JSONB, nullable=True)  # Optional additional conditions
     scope = Column(String(50), nullable=True)  # Optional scope restriction
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True)
+    project_id = Column(UUID, ForeignKey("projects.id"), nullable=True)
     
     # Rule parameters
     confidence_weight = Column(Numeric(5, 2), default=1.0)
@@ -40,7 +40,7 @@ class SuppressionRule(Base):
     requires_revalidation = Column(Boolean, default=False)
     
     # Audit
-    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    created_by = Column(UUID, ForeignKey("users.id"), nullable=True)
     reason = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     last_revalidated = Column(DateTime, nullable=True)

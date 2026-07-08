@@ -6,7 +6,7 @@ Maps internal codes to Climatiq emission factors
 import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, DateTime, Float, Integer, ForeignKey, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from app.db.types import UUID, JSONB
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base
@@ -21,7 +21,7 @@ class CustomMapping(Base):
     
     __tablename__ = "custom_mappings"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID, primary_key=True, default=uuid.uuid4)
     
     # Internal identifier (from ERP, accounting system, etc.)
     internal_label = Column(String(255), nullable=False)
@@ -46,10 +46,10 @@ class CustomMapping(Base):
     last_used_at = Column(DateTime, nullable=True)
     
     # Relationships
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    organization_id = Column(UUID, ForeignKey("organizations.id"), nullable=False)
     organization = relationship("Organization", back_populates="custom_mappings")
     
-    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    created_by = Column(UUID, ForeignKey("users.id"), nullable=True)
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

@@ -5,7 +5,7 @@ Batch Job model for tracking async batch processing
 import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, DateTime, Integer, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from app.db.types import UUID, JSONB
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base
@@ -18,7 +18,7 @@ class BatchJob(Base):
     
     __tablename__ = "batch_jobs"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID, primary_key=True, default=uuid.uuid4)
     
     # Job metadata
     job_type = Column(String(50), nullable=False)  # batch_estimate, batch_import, report_generation
@@ -45,7 +45,7 @@ class BatchJob(Base):
     celery_task_id = Column(String(255), nullable=True, unique=True, index=True)
     
     # Relationships
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True)
+    project_id = Column(UUID, ForeignKey("projects.id"), nullable=True)
     project = relationship("Project")
     
     activities = relationship("EmissionActivity", back_populates="batch_job")

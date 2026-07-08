@@ -5,7 +5,7 @@ Copilot Cache model - LLM response caching for rate-limit management
 import uuid
 from datetime import datetime, timedelta
 from sqlalchemy import Column, String, DateTime, ForeignKey, Index, Integer, Text
-from sqlalchemy.dialects.postgresql import UUID
+from app.db.types import UUID
 
 from app.db.base import Base
 
@@ -22,7 +22,7 @@ class CopilotCache(Base):
     
     __tablename__ = "copilot_cache"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID, primary_key=True, default=uuid.uuid4)
     
     # Cache key (SHA256 hash of query + context)
     query_hash = Column(String(64), unique=True, index=True, nullable=False)
@@ -36,7 +36,7 @@ class CopilotCache(Base):
     response = Column(Text, nullable=False)
     
     # Scope
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    organization_id = Column(UUID, ForeignKey("organizations.id"), nullable=False)
     
     # Cache management
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
