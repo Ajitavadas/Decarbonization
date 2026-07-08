@@ -69,6 +69,7 @@ docker-compose.override.yml
 
 # Node.js / Frontend
 node_modules/
+.nodeenv/
 .next/
 out/
 .cache/

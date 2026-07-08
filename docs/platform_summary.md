@@ -87,14 +87,13 @@ This platform provides significant value by:
 - **Verification Script**: `verify_csv.sh`
 
 ### Platform Access:
-- Main dashboard URL: [To be provided]
-- API Documentation: `/api/docs` (Swagger UI)
+- **Repository**: [github.com/Ajitavadas/Decarbonization](https://github.com/Ajitavadas/Decarbonization)
+- API Documentation: `/docs` (Swagger UI)
 
 ## Contact Information
 
 For questions or further discussion about the Decarbonization Platform:
-- Developer: [Your Name]
-- Email: [Your Email]
-- Technical Support: [Support Contact]
+- **Developer**: Ajitava Das
+- **Repository**: [github.com/Ajitavadas/Decarbonization](https://github.com/Ajitavadas/Decarbonization)
 
-This platform is ready for evaluation and integration with ClimateIQ's GTM initiatives.
+This platform is ready for evaluation and integration with Climatiq's GTM initiatives.

@@ -56,13 +56,20 @@ npm run dev
 - **API Documentation**: http://localhost:8000/docs
 - **Health Check**: http://localhost:8000/health
 
-## API Keys (Already Configured)
+## API Keys
 
-The following API keys are already set in `backend/.env`:
+Copy the example env file and add your own keys:
 
-- **Climatiq API**: ``
-- **Mistral API**: ``
-- **Gemini API**: ``
+```bash
+cd backend
+cp .env.example .env
+# Edit .env with your API keys
+```
+
+Required keys (see `backend/.env.example` for all options):
+- **Climatiq API**: Get yours at [climatiq.io](https://www.climatiq.io/)
+- **Mistral API**: Get yours at [console.mistral.ai](https://console.mistral.ai/)
+- **Gemini API**: Get yours at [aistudio.google.com](https://aistudio.google.com/)
 
 ## Database
 

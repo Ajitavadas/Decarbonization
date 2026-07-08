@@ -103,7 +103,7 @@ The test file `test_upload_fresh.csv` contains 20 rows of sample emission data d
 
 ## Support & Documentation
 
-For technical support or questions about the platform, please contact:
-- Platform Developer: [Your Name]
-- Technical Documentation: docs/platform_overview.md
-- API Endpoints: /api/docs (Swagger UI)
+For technical support or questions about the platform:
+- **Repository**: [github.com/Ajitavadas/Decarbonization](https://github.com/Ajitavadas/Decarbonization)
+- **Technical Documentation**: `docs/` directory
+- **API Endpoints**: `/docs` (Swagger UI)
