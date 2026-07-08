@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """
-E2E Test with test_fresh.csv - New user, new org, verify calculations
+E2E Test with test_data_20_rows.csv - New user, new org, verify calculations
 """
 
 import requests
 import json
 import random
 import time
+from pathlib import Path
 
 BASE_URL = "http://localhost:8000/api/v1"
-CSV_FILE = "test_fresh.csv"
+CSV_FILE = str(Path(__file__).resolve().parent / "data" / "test_data_20_rows.csv")
 RANDOM_SUFFIX = random.randint(10000, 99999)
 
 def main():

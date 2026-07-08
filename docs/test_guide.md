@@ -5,7 +5,7 @@
 - **Password**: 12345678
 
 ## Test Data CSV File
-**File**: `test_data_20_rows.csv` (in project root)
+**File**: `tests/data/test_data_20_rows.csv` (in tests/data directory)
 
 This file contains 20 synthetic activity rows with diverse emission sources across different categories.
 

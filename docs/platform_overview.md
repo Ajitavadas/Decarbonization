@@ -85,7 +85,7 @@ This platform provides significant value to ClimateIQ's GTM team by:
 
 ## Test Data Verification
 
-The test file `test_upload_fresh.csv` contains 20 rows of sample emission data demonstrating:
+The test file `tests/data/test_data_20_rows.csv` contains 20 rows of sample emission data demonstrating:
 
 - Multiple categories (Electricity, Heating Fuel, Transportation, etc.)
 - Various units (kWh, therms, gallons, miles)

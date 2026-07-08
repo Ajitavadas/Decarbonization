@@ -31,7 +31,7 @@ The Decarbonization Platform is a comprehensive solution for organizations to me
 
 ## Test Data Validation
 
-We've created a fresh test file `test_upload_fresh.csv` containing 20 rows of sample emission data that demonstrates:
+We've created a fresh test file `tests/data/test_data_20_rows.csv` containing 20 rows of sample emission data that demonstrates:
 
 ### Data Structure
 - **Columns**: description, amount, unit, category, supplier_name, region, activity_date, year
@@ -66,7 +66,7 @@ This platform provides significant value by:
    - `docs/user_guide.md` - Complete user instructions
 
 2. **Test Upload Process**:
-   - Use `test_upload_fresh.csv` for validation testing
+   - Use `tests/data/test_data_20_rows.csv` for validation testing
    - Verify data processing pipeline works correctly
    - Test onboarding system functionality
 
@@ -83,8 +83,7 @@ This platform provides significant value by:
 - **User Guide**: `docs/user_guide.md`
 
 ### Test Data:
-- **Sample CSV**: `test_upload_fresh.csv` (20 rows)
-- **Verification Script**: `verify_csv.sh`
+- **Sample CSV**: `tests/data/test_data_20_rows.csv` (20 rows)
 
 ### Platform Access:
 - **Repository**: [github.com/Ajitavadas/Decarbonization](https://github.com/Ajitavadas/Decarbonization)

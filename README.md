@@ -1,93 +1,90 @@
 # Decarbonization Platform
 
-AI-Powered Carbon Accounting and Decarbonization Platform for sustainable business practices.
+AI-Powered Carbon Accounting and Decarbonization Platform built on the [Climatiq API](https://www.climatiq.io/).
 
 ## Features
 
-- AI-powered carbon footprint calculation using Climatiq API
-- Copilot functionality with LLMs (Mistral, Gemini, Groq)
-- Dashboard with visualization of decarbonization metrics
-- Activity tracking and reporting
-- Anomaly detection for emissions data
-- Multi-tenant architecture
+- **Climatiq-powered emission estimates** — CSV upload → AI classification → batch Climatiq API calls
+- **AI Copilot** — natural-language queries over your emission data (Groq/Mistral/Gemini)
+- **Dashboard** — scope 1/2/3 breakdowns, trend charts, category analysis
+- **Anomaly detection** — automatic flagging of unusual emission spikes
+- **Reporting** — export to PDF, Word, Excel
+- **Reduction targets** — set baselines, track progress against goals
+- **Multi-tenant architecture** — organization isolation with JWT auth
 
 ## Architecture
 
-### Backend (Python/FastAPI)
-- RESTful API with FastAPI
-- PostgreSQL database
-- Redis caching
-- Celery for background tasks
-- AI/ML integration via Mistral, Gemini, Groq APIs
-
-### Frontend (Next.js)
-- React-based dashboard
-- TypeScript and Tailwind CSS
-- Real-time data visualization
-- Responsive design for all devices
-
-## Getting Started
-
-### Prerequisites
-- Python 3.10+
-- Node.js 18+
-- Docker (optional for full deployment)
-
-### Backend Setup
-
-```bash
-cd backend
-pip install -r requirements.txt
-cp .env.example .env
-# Edit .env with your configuration
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+frontend/          Next.js 15 · React 19 · Tailwind 4 · shadcn/ui · Recharts
+backend/           FastAPI · SQLAlchemy · Pydantic · Climatiq SDK
+  app/api/         12 REST endpoints (auth, upload, activities, reports, copilot, ...)
+  app/services/    AI classifier, copilot, anomaly detector, report generator, ...
+  app/integration/ Climatiq client, schemas, batch processor
+  app/models/      14 SQLAlchemy models
+tests/             E2E and integration tests
+docs/              Platform docs, tech specs, user guide
 ```
 
-### Frontend Setup
+## Quick Start
+
+### Prerequisites
+- Python 3.11+ with [`uv`](https://docs.astral.sh/uv/)
+- Node.js 18+
+
+### Setup
 
 ```bash
+# Backend
+cd backend
+cp .env.example .env      # Add your API keys
+uv sync                   # Install dependencies
+uv run alembic upgrade head
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Frontend (new terminal)
 cd frontend
 npm install
 npm run dev
 ```
 
-## API Endpoints
+Or use the one-command launcher: `./start.sh`
 
-- `/api/v1/` - Main API endpoints
-- `/docs` - Interactive API documentation (Swagger UI)
-- `/redoc` - ReDoc documentation
+### Access Points
+- **App**: http://localhost:3000
+- **API**: http://localhost:8000
+- **API Docs**: http://localhost:8000/docs
+
+> See [docs/quickstart.md](docs/quickstart.md) for full setup details.
 
 ## Configuration
 
-Environment variables are used for configuration:
+Copy `backend/.env.example` → `backend/.env` and set:
 
-### Application Settings
-- `APP_NAME` - Application name
-- `DEBUG` - Debug mode flag
-- `ENVIRONMENT` - Environment (development, staging, production)
+| Variable | Description |
+|----------|-------------|
+| `CLIMATIQ_API_KEY` | [Climatiq](https://www.climatiq.io/) API key |
+| `MISTRAL_API_KEY` | [Mistral](https://console.mistral.ai/) AI key |
+| `GEMINI_API_KEY` | [Google AI](https://aistudio.google.com/) key (optional) |
+| `GROQ_API_KEY` | [Groq](https://console.groq.com/) key (Copilot) |
+| `DATABASE_URL` | PostgreSQL or SQLite connection string |
+| `SECRET_KEY` | JWT secret (min 32 chars) |
 
-### Climatiq API
-- `CLIMATIQ_API_KEY` - Climatiq API authentication key
-- `CLIMATIQ_BASE_URL` - Climatiq API base URL
+## Documentation
 
-### AI Services
-- `MISTRAL_API_KEY` - Mistral AI API key
-- `GEMINI_API_KEY` - Gemini AI API key
-- `GROQ_API_KEY` - Groq AI API key
+| Document | Description |
+|----------|-------------|
+| [Quick Start](docs/quickstart.md) | Setup and running instructions |
+| [Platform Overview](docs/platform_overview.md) | Features and GTM summary |
+| [Technical Specs](docs/technical_specifications.md) | Architecture deep-dive |
+| [User Guide](docs/user_guide.md) | End-user instructions |
+| [Test Guide](docs/test_guide.md) | E2E testing walkthrough |
 
-### Database
-- `DATABASE_URL` - Database connection string (PostgreSQL or SQLite)
+## Testing
 
-### Security
-- `SECRET_KEY` - JWT secret key for authentication
-- `ALGORITHM` - JWT algorithm
-- `ACCESS_TOKEN_EXPIRE_MINUTES` - Token expiration time
-
-## Development
-
-The platform is structured as a monorepo with:
-- `/backend` - Python FastAPI application
-- `/frontend` - Next.js React application
+```bash
+# Test data is in tests/data/test_data_20_rows.csv
+# See docs/test_guide.md for the full E2E walkthrough
+```
 
 ## License
 

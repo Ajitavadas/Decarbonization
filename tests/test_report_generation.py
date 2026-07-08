@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 
 BASE_URL = "http://localhost:8000/api/v1"
-CSV_FILE = str(Path(__file__).resolve().parent.parent / "test_fresh.csv")
+CSV_FILE = str(Path(__file__).resolve().parent / "data" / "test_data_20_rows.csv")
 RANDOM_SUFFIX = random.randint(10000, 99999)
 
 def main():

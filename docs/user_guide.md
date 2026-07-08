@@ -85,7 +85,7 @@ The CarbonCopilot is available as a side panel:
 
 ## Sample Data Verification
 
-The platform includes sample data in `test_upload_fresh.csv` demonstrating:
+The platform includes sample data in `tests/data/test_data_20_rows.csv` demonstrating:
 
 ### Data Structure:
 - 20 rows of diverse emission activities
