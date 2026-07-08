@@ -60,9 +60,9 @@ npm run dev
 
 The following API keys are already set in `backend/.env`:
 
-- **Climatiq API**: `CQHH52HK7153BC00BV6TPRA9NR`
-- **Mistral API**: `ZrMqOeea8AqRZ4beF3mBfdCtdPn67sGb`
-- **Gemini API**: `AIzaSyAbP9kMymiy9lDqZeRZ_RxOz7auCyexjqA`
+- **Climatiq API**: ``
+- **Mistral API**: ``
+- **Gemini API**: ``
 
 ## Database
 
