@@ -1,0 +1,19 @@
+description,amount,unit,region,activity_date,year,category,supplier_name
+Grid electricity - Berlin headquarters,142000,kWh,DE,2025-01-15,2025,Electricity,Vattenfall
+Grid electricity - Munich R&D campus,88000,kWh,DE,2025-02-15,2025,Electricity,E.ON
+Grid electricity - Bangalore delivery center,164000,kWh,IN,2025-01-20,2025,Electricity,BESCOM
+Grid electricity - Austin data center,238000,kWh,US,2025-02-10,2025,Electricity,Austin Energy
+Natural gas heating - Berlin headquarters,52000,kWh,DE,2025-01-31,2025,Heating,GASAG
+Diesel backup generators - Bangalore campus,4200,L,IN,2025-02-05,2025,Fuel,Indian Oil
+Company fleet gasoline - US field sales team,5600,L,US,2025-02-18,2025,Fleet,Shell
+Business flights - long haul Berlin to New York,48000,km,DE,2025-03-01,2025,Business Travel,Lufthansa
+Business flights - regional India domestic,26000,km,IN,2025-03-05,2025,Business Travel,IndiGo
+Employee rail commuting - Berlin office,120000,km,DE,2025-03-10,2025,Employee Commuting,Deutsche Bahn
+Road freight - components Hamburg to Munich,3400,km,DE,2025-03-15,2025,Freight,DB Schenker
+Cloud computing services - annual spend,180000,USD,US,2025-03-20,2025,Purchased Services,AWS
+Laptops and IT hardware procurement,220000,USD,US,2025-04-01,2025,Capital Goods,Dell
+Office paper and printed materials,34000,USD,DE,2025-04-05,2025,Purchased Goods,Staples
+Hotel accommodation - global business travel,96000,USD,US,2025-04-10,2025,Business Travel,Marriott
+Professional consulting services spend,150000,USD,GB,2025-04-15,2025,Purchased Services,Accenture
+General office waste to landfill,18500,kg,DE,2025-04-20,2025,Waste,ALBA Group
+Municipal water supply - all offices,9200,m3,DE,2025-04-25,2025,Water,Berliner Wasser

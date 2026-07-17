@@ -136,6 +136,55 @@ class CopilotService:
             except Exception as e:
                 logger.error(f"Failed to initialize Groq client: {e}")
         return self._groq_client
+
+    async def _llm_complete(
+        self,
+        prompt: str,
+        json_mode: bool = False,
+        temperature: float = 0.1,
+        max_tokens: int = 1000,
+    ) -> str:
+        """
+        Run an LLM completion for the copilot.
+
+        Prefers Vertex AI Gemini (billed to the GCP project via ADC); falls
+        back to Groq if Vertex is unavailable. Returns the raw text content.
+        """
+        # 1. Vertex AI Gemini (primary)
+        if settings.USE_VERTEX_AI:
+            try:
+                from app.services.ai_base_service import AIBaseService
+                client = AIBaseService._get_vertex_client()
+                if client is not None:
+                    config: Dict[str, Any] = {
+                        "temperature": temperature,
+                        "max_output_tokens": max_tokens,
+                    }
+                    if json_mode:
+                        config["response_mime_type"] = "application/json"
+                    response = await client.aio.models.generate_content(
+                        model=settings.VERTEX_MODEL,
+                        contents=prompt,
+                        config=config,
+                    )
+                    if response.text:
+                        return response.text
+            except Exception as e:
+                logger.warning(f"Copilot Vertex AI call failed ({e}); falling back to Groq")
+
+        # 2. Groq (fallback)
+        if not self.groq_client:
+            raise RuntimeError("No LLM provider available (Vertex and Groq both unavailable)")
+        kwargs: Dict[str, Any] = {
+            "model": settings.COPILOT_MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+        response = self.groq_client.chat.completions.create(**kwargs)
+        return response.choices[0].message.content
     
     def _check_rate_limit(self) -> Tuple[bool, Optional[datetime]]:
         """Check if organization has exceeded rate limit"""
@@ -374,18 +423,9 @@ Respond with valid JSON only:
 }}"""
 
         try:
-            if not self.groq_client:
-                return {"intent": "error", "sql_query": None, "explanation": "Groq client unavailable"}
-            
-            response = self.groq_client.chat.completions.create(
-                model=settings.COPILOT_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.1,
-                max_tokens=1000,
-                response_format={"type": "json_object"}
+            result_text = await self._llm_complete(
+                prompt, json_mode=True, temperature=0.1, max_tokens=1000
             )
-            
-            result_text = response.choices[0].message.content
             result = json.loads(result_text)
             
             logger.info(f"LLM generated intent: {result.get('intent')}, SQL: {result.get('sql_query', 'None')[:100] if result.get('sql_query') else 'None'}")
@@ -496,17 +536,10 @@ INSTRUCTIONS:
 Respond naturally:"""
 
         try:
-            if not self.groq_client:
-                return "I'm unable to generate a response at this time."
-            
-            response = self.groq_client.chat.completions.create(
-                model=settings.COPILOT_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=500
+            response_text = await self._llm_complete(
+                prompt, json_mode=False, temperature=0.3, max_tokens=500
             )
-            
-            return response.choices[0].message.content.strip()
+            return response_text.strip()
             
         except Exception as e:
             logger.error(f"Response generation failed: {e}")

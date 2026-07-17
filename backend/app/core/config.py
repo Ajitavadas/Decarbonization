@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = Field(default="", description="Gemini AI API key for Auditor Agent")
     GROQ_API_KEY: str = Field(default="", description="Groq AI API key for Auditor Agent")
     AI_MIN_CONFIDENCE_THRESHOLD: float = 0.7  # Minimum confidence for auto-approval
+
+    # Vertex AI (Gemini via Google Cloud, authenticated with ADC)
+    # Uses Application Default Credentials (gcloud auth application-default login)
+    # instead of an API key, billed to the configured GCP project.
+    USE_VERTEX_AI: bool = Field(default=True, description="Route Gemini calls through Vertex AI with ADC")
+    VERTEX_PROJECT_ID: str = Field(default="", description="GCP project ID with Vertex AI credits")
+    VERTEX_LOCATION: str = Field(default="global", description="Vertex AI location/region")
+    VERTEX_MODEL: str = Field(default="gemini-2.5-flash", description="Vertex AI Gemini model")
     
     # Database
     DATABASE_URL: str = Field(..., description="Database connection string (PostgreSQL or SQLite)")

@@ -46,9 +46,9 @@ class AIScopeClassifierService(AIBaseService):
         prompt = self._build_scope_prompt(simplified_data)
         
         try:
-            # Groq is typically faster/better for structured classification in some cases, 
-            # but user wants failsafe across all.
-            response_text = await self.call_ai(prompt, json_mode=True, preferred_provider="mistral")
+            # Auto provider order: Vertex AI Gemini first (credits/no rate limit),
+            # then Mistral as fallback.
+            response_text = await self.call_ai(prompt, json_mode=True)
             parsed_results = self._parse_json_response(response_text)
             return self._map_results(rows, parsed_results, "ai")
         except Exception as e:
@@ -370,8 +370,9 @@ Return ONLY a JSON object (no markdown):
 """
         
         try:
-            response_text = await self.call_ai(prompt, json_mode=True, preferred_provider="mistral")
-            
+            # Auto provider order: Vertex AI Gemini first, Mistral fallback.
+            response_text = await self.call_ai(prompt, json_mode=True)
+
             # Parse JSON response
             clean_content = response_text.strip()
             if clean_content.startswith("```json"):

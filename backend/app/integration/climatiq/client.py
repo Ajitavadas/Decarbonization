@@ -187,7 +187,7 @@ class ClimatiqClient:
         Returns:
             Energy response with co2e (Scope 2)
         """
-        return await self._make_request("POST", "/energy/electricity", data=payload)
+        return await self._make_request("POST", "/energy/v1/electricity", data=payload)
     
     async def fuel(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -200,7 +200,7 @@ class ClimatiqClient:
         Returns:
             Energy response with co2e (Scope 1)
         """
-        return await self._make_request("POST", "/energy/fuel", data=payload)
+        return await self._make_request("POST", "/energy/v1/fuel", data=payload)
     
     async def heat_steam(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -213,7 +213,7 @@ class ClimatiqClient:
         Returns:
             Energy response with co2e (Scope 2)
         """
-        return await self._make_request("POST", "/energy/heat-steam", data=payload)
+        return await self._make_request("POST", "/energy/v1/heat-steam", data=payload)
     
     # ========== Freight Endpoints ==========
     
@@ -298,22 +298,24 @@ class ClimatiqClient:
         region: Optional[str] = None,
         year: Optional[int] = None,
         data_version: Optional[str] = None,
+        unit_type: Optional[str] = None,
         page: int = 1,
         limit: int = 10
     ) -> Dict[str, Any]:
         """
         Search emission factors database
         GET /data/v1/search
-        
+
         Args:
             query: Search query text
             category: Activity category filter
             region: Region filter
             year: Year filter
             data_version: Climatiq data version (e.g., "29.29")
+            unit_type: Filter by unit type (e.g., "Volume", "Energy", "Money")
             page: Page number
             limit: Results per page
-            
+
         Returns:
             Search results with emission factors
         """
@@ -321,7 +323,7 @@ class ClimatiqClient:
             "page": page,
             "results_per_page": limit
         }
-        
+
         if query:
             params["query"] = query
         if category:
@@ -332,5 +334,7 @@ class ClimatiqClient:
             params["year"] = year
         if data_version:
             params["data_version"] = data_version
-        
+        if unit_type:
+            params["unit_type"] = unit_type
+
         return await self._make_request("GET", "/data/v1/search", params=params)

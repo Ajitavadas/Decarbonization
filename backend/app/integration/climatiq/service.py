@@ -720,19 +720,34 @@ class ClimatiqService:
                 return await self._calculate_freight(activity_search, amount, unit, region, year)
             
             else:  # autopilot
-                return await self._calculate_autopilot(normalized_desc, amount, unit, param_type, region, year)
+                # Autopilot is a premium feature on some plans; prefer the
+                # public search + estimate flow and keep autopilot as fallback
+                try:
+                    return await self._calculate_estimate(
+                        activity_search or normalized_desc, amount, unit, param_type, region, year
+                    )
+                except Exception as e:
+                    print(f"DEBUG - Estimate route failed ({e}), trying autopilot")
+                    return await self._calculate_autopilot(normalized_desc, amount, unit, param_type, region, year)
                 
         except Exception as e:
-            print(f"DEBUG - Endpoint {endpoint} failed: {e}, falling back to autopilot")
-            # Fallback to autopilot
+            print(f"DEBUG - Endpoint {endpoint} failed: {e}, falling back to search+estimate")
+            # Prefer the public search + estimate flow over autopilot
+            # (autopilot is a premium feature on some plans)
             try:
-                return await self._calculate_autopilot(normalized_desc, amount, unit, param_type, region, year)
+                return await self._calculate_estimate(
+                    activity_search or normalized_desc, amount, unit, param_type, region, year
+                )
             except Exception as e2:
-                print(f"DEBUG - Autopilot fallback also failed: {e2}")
-                return {
-                    "estimate": {"co2e": 0, "co2e_unit": "kg", "error": str(e)},
-                    "endpoint_type": "error"
-                }
+                print(f"DEBUG - Estimate fallback failed: {e2}, trying autopilot")
+                try:
+                    return await self._calculate_autopilot(normalized_desc, amount, unit, param_type, region, year)
+                except Exception as e3:
+                    print(f"DEBUG - Autopilot fallback also failed: {e3}")
+                    return {
+                        "estimate": {"co2e": 0, "co2e_unit": "kg", "error": str(e)},
+                        "endpoint_type": "error"
+                    }
     
     async def _calculate_fuel(
         self,
@@ -839,7 +854,26 @@ class ClimatiqService:
             }
         
         print(f"DEBUG - Fuel payload: {fuel_payload}")
-        result = await self.client.fuel(fuel_payload)
+        try:
+            result = await self.client.fuel(fuel_payload)
+        except Exception as e:
+            # Energy API is a premium feature; fall back to the public
+            # search + estimate flow with fuel combustion factors
+            print(f"DEBUG - Fuel endpoint unavailable ({e}), falling back to search+estimate")
+            fuel_search_names = {
+                "diesel": "diesel combustion",
+                "motor_gasoline": "gasoline petrol combustion",
+                "natural_gas": "natural gas combustion",
+                "lpg": "lpg combustion"
+            }
+            return await self._calculate_estimate(
+                activity_search=fuel_search_names.get(mapped_fuel, f"{mapped_fuel} fuel combustion"),
+                amount=amount,
+                unit=unit,
+                param_type=param_type,
+                region=region,
+                year=year
+            )
         
         # Extract CO2e from fuel response
         co2e = result.get("combustion", {}).get("co2e", 0)
@@ -888,7 +922,43 @@ class ClimatiqService:
         }
         
         print(f"DEBUG - Electricity payload: {electricity_payload}")
-        result = await self.client.electricity(electricity_payload)
+        try:
+            result = await self.client.electricity(electricity_payload)
+        except Exception as e:
+            # Energy API is a premium feature; fall back to the public estimate
+            # endpoint with the canonical grid-mix factor for the region
+            print(f"DEBUG - Electricity endpoint unavailable ({e}), falling back to grid-mix estimate")
+            try:
+                result = await self.client.estimate({
+                    "emission_factor": {
+                        "activity_id": "electricity-supply_grid-source_supplier_mix",
+                        "region": region,
+                        "data_version": settings.CLIMATIQ_DATA_VERSION
+                    },
+                    "parameters": {"energy": energy, "energy_unit": energy_unit}
+                })
+                return {
+                    "estimate": {
+                        "co2e": result.get("co2e", 0),
+                        "co2e_unit": result.get("co2e_unit", "kg"),
+                        "emission_factor": result.get("emission_factor", {}),
+                        "activity_data": {
+                            "activity_value": float(amount),
+                            "activity_unit": unit
+                        }
+                    },
+                    "endpoint_type": "estimate"
+                }
+            except Exception as e2:
+                print(f"DEBUG - Grid-mix estimate failed ({e2}), falling back to search+estimate")
+                return await self._calculate_estimate(
+                    activity_search="electricity supplied from grid",
+                    amount=energy,
+                    unit=energy_unit,
+                    param_type="energy",
+                    region=region,
+                    year=year
+                )
         
         # Extract CO2e from electricity response
         co2e = 0
@@ -960,29 +1030,43 @@ class ClimatiqService:
         # Ensure activity_search is a string (may come as list from AI)
         if isinstance(activity_search, list):
             activity_search = " ".join(activity_search)
-        
-        # Search for the best activity_id
-        print(f"DEBUG - Searching for activity_id with: {activity_search}")
+
+        # Map our parameter type to the Climatiq unit_type filter so the
+        # search only returns factors compatible with the parameters we send
+        unit_type_filter = {
+            "energy": "Energy",
+            "volume": "Volume",
+            "weight": "Weight",
+            "distance": "Distance",
+            "money": "Money",
+            "passengers_distance": "PassengerOverDistance",
+            "weight_distance": "WeightOverDistance",
+        }.get(param_type)
+
+        # Search for the best activity_id (filtered by unit type when known)
+        print(f"DEBUG - Searching for activity_id with: {activity_search} (unit_type={unit_type_filter})")
         search_result = await self.client.search_emission_factors(
             query=activity_search,
             region=region,
             year=year,
             data_version=settings.CLIMATIQ_DATA_VERSION,
+            unit_type=unit_type_filter,
             limit=5
         )
-        
+
         results = search_result.get("results", [])
-        
+
         # If no results for specific region, try without region filter
         if not results:
             print(f"DEBUG - No results for '{activity_search}' in {region}, trying global search")
             search_result = await self.client.search_emission_factors(
                 query=activity_search,
                 data_version=settings.CLIMATIQ_DATA_VERSION,
+                unit_type=unit_type_filter,
                 limit=10
             )
             results = search_result.get("results", [])
-        
+
         # If still no results, try broader search
         if not results:
             print(f"DEBUG - No results, trying broader search with first word")
@@ -990,6 +1074,7 @@ class ClimatiqService:
             search_result = await self.client.search_emission_factors(
                 query=first_word,
                 data_version=settings.CLIMATIQ_DATA_VERSION,
+                unit_type=unit_type_filter,
                 limit=10
             )
             results = search_result.get("results", [])
@@ -1017,11 +1102,19 @@ class ClimatiqService:
                 activity_id = r.get("activity_id")
                 selected_result = r
                 break
+            elif param_type == "volume" and "Volume" in unit_type:
+                activity_id = r.get("activity_id")
+                selected_result = r
+                break
             elif param_type == "money" and "Money" in unit_type:
                 activity_id = r.get("activity_id")
                 selected_result = r
                 break
-            elif param_type == "passengers_distance" and "PassengersDistance" in unit_type:
+            elif param_type == "passengers_distance" and "PassengerOverDistance" in unit_type:
+                activity_id = r.get("activity_id")
+                selected_result = r
+                break
+            elif param_type == "weight_distance" and "WeightOverDistance" in unit_type:
                 activity_id = r.get("activity_id")
                 selected_result = r
                 break
@@ -1111,7 +1204,15 @@ class ClimatiqService:
             elif unit_lower == 'mwh':
                 energy = energy * 1000
             return {"energy": energy, "energy_unit": "kWh"}
-        
+
+        elif param_type == "volume":
+            volume = float(amount)
+            if unit_lower in ['gal', 'gallon', 'gallons']:
+                volume = volume * 3.78541  # US gallons to liters
+            elif unit_lower in ['m3', 'm³', 'cubic meter', 'cubic metre']:
+                volume = volume * 1000  # cubic meters to liters
+            return {"volume": volume, "volume_unit": "l"}
+
         elif param_type == "money":
             return {"money": float(amount), "money_unit": unit.lower()}
         
